@@ -1,0 +1,1064 @@
+pageType: content
+background:
+  type: solid
+  color: $lt1
+notes: |-
+  本页进入 Infrastructure 章节的高性能 kernel（报告 §5.1.1），讲训练和 Prefill 共用的 FlashKDA。要解决的问题是 chunkwise KDA 的结构矛盾：chunk 内可以并行做 matmul，chunk 间状态 S 必须串行传递；朴素实现让两个阶段交替执行，串行传播期间算力空置，气泡占比随 chunk 数线性放大。
+  左图上半部分是调度思路：FlashKDA 把计算分解为 token 并行阶段和 head 并行递归，各自独立调度调参，用 chunk 内的稠密计算把跨 chunk 状态传播"盖"住。下半部分是长序列短板的对策：纯 TP 只切 head、不缩短递归，SM 级 CP planner 在单设备内切分序列、并行求各段转移再精确合并，全程无跨设备通信。
+  对应右表按阶段看：chunk 内注意力是稠密 matmul，要求 CUBE 算力，tile 64×128 正好匹配 CUBE 分块；跨 chunk 读取和状态更新是 dk×dv 小矩阵，CUBE 利用率低，对策是与 chunk 内计算双缓冲交叠、并让 S 驻留片上（dk=dv=128 时每 head 约 32KB）避免 HBM 往返；累积衰减 Γ 是纯 Vector 逐元素，恰好与 matmul 构成异构流水；UT 变换这类小尺寸 matmul 宜融合进主 kernel。
+  对开发的启发：vllm-ascend 现状是 Triton 版多 kernel 串行调度，kernel 间显存往返多、串行段无掩盖，与 FlashKDA 存在代差；需要 Ascend C 融合 chunkwise 算子，加上 CP planner 的 AICore 级对等实现，核心评价指标是串行段掩盖率。
+  最后看页面底部的开发需求与趋势。昇腾现状：vllm-ascend 是 Triton 版 chunk_kda，scaled_dot_kkt、solve_tril、wy_fast、chunk_delta_h、chunk_o 等多个 kernel 串行调度，与 FlashKDA 存在代差。需求一是 Ascend C 融合 chunkwise 算子：intra-chunk matmul 上 CUBE，状态传播与计算双缓冲流水，S 驻留 L1/UB 避免 HBM 往返。需求二是 SM 级 CP planner 的 NPU 对等实现：AICore 级序列切分、段转移并行求值与前缀合并，适配昇腾核间同步机制。趋势判断：线性注意力 prefill 算子的竞争点是串行段掩盖率；Cube/Vector 异构流水加片上状态驻留是达成路径，TileLang 类 DSL 可以缩短开发周期。
+elements:
+  - elementId: source-note
+    elementType: text
+    bounds: [370, 14, 554, 14]
+    content:
+      text: |-
+        <p style="text-align: right;">资料来源：Kimi K3 Technical Report §5.1.1；FlashKDA（MoonshotAI）；vllm-ascend ops/triton/kda</p>
+      wrap: false
+      align:
+        - right
+        - middle
+      style: $text1
+  - elementId: title
+    elementType: text
+    bounds: [44, 18, 880, 30]
+    content:
+      text: |-
+        <p style="text-align: left;">FlashKDA：chunkwise 训练 / Prefill 融合算子</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text2
+  - elementId: concl-label-bg
+    elementType: shape
+    bounds: [44, 58, 88, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#C00000"
+  - elementId: concl-label
+    elementType: text
+    bounds: [44, 58, 88, 110]
+    content:
+      text: |-
+        <p style="text-align: center;">分析</p><p style="text-align: center;">结论</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text3
+  - elementId: concl-body-bg
+    elementType: shape
+    bounds: [140, 58, 784, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#F2F2F2"
+  - elementId: concl-bullets
+    elementType: text
+    bounds: [154, 63, 756, 100]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><strong>问题</strong>：chunkwise KDA = chunk 内并行 + chunk 间串行，串行传播期间算力空置 → 气泡随 chunk 数线性放大</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>方案</strong>：token 并行与 head 并行两阶段分解、独立调度，以 chunk 内计算掩盖跨 chunk 状态传播 → 显著优于 Triton 参考实现</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>负载构成</strong>：chunk 内稠密 matmul 上 CUBE，chunk 间小矩阵沿 head 维并行并被掩盖 → CUBE 利用率与流水深度是核心指标</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>长序列短板</strong>：纯 TP 不缩短递归 → SM 级 CP planner 在单设备内切分序列、并行求转移再精确合并，无跨设备通信</li></ul>
+      color: "#262626"
+      fontSize: 9
+      fontFamily: 微软雅黑, 微软雅黑
+      lineHeight: 1.35
+      wrap: true
+      align:
+        - left
+        - middle
+  - elementId: arch-label
+    elementType: text
+    bounds: [44, 180, 260, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">计算 / 状态传播调度交叠</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: fig-flashkda-s1
+    elementType: shape
+    bounds: [46.7, 206.7, 405.7, 91.6]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t2
+    elementType: text
+    bounds: [55.4, 218.2, 133.9, 11.9]
+    content:
+      text: |-
+        <p style="text-align: left;">朴素交替：CUBE / Vector 串行等待</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text14
+  - elementId: fig-flashkda-s3
+    elementType: shape
+    bounds: [68.5, 248.1, 39.3, 28.3]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t4
+    elementType: text
+    bounds: [68.5, 248.1, 39.3, 28.3]
+    content:
+      text: |-
+        <p style="text-align: center;">C1</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text15
+  - elementId: fig-flashkda-s5
+    elementType: shape
+    bounds: [114.3, 248.1, 24, 28.3]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#9A9A9C"
+  - elementId: fig-flashkda-t6
+    elementType: text
+    bounds: [118.7, 257.6, 15.3, 9.3]
+    content:
+      text: |-
+        <p style="text-align: center;">空闲</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text16
+  - elementId: fig-flashkda-s7
+    elementType: shape
+    bounds: [144.9, 248.1, 26.2, 28.3]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t8
+    elementType: text
+    bounds: [144.9, 248.1, 26.2, 28.3]
+    content:
+      text: |-
+        <p style="text-align: center;">S1</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text17
+  - elementId: fig-flashkda-s9
+    elementType: shape
+    bounds: [177.6, 248.1, 24, 28.3]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#9A9A9C"
+  - elementId: fig-flashkda-t10
+    elementType: text
+    bounds: [181.9, 257.6, 15.3, 9.3]
+    content:
+      text: |-
+        <p style="text-align: center;">空闲</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text16
+  - elementId: fig-flashkda-s11
+    elementType: shape
+    bounds: [208.1, 248.1, 39.3, 28.3]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t12
+    elementType: text
+    bounds: [208.1, 248.1, 39.3, 28.3]
+    content:
+      text: |-
+        <p style="text-align: center;">C2</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text15
+  - elementId: fig-flashkda-s13
+    elementType: shape
+    bounds: [253.9, 248.1, 24, 28.3]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#9A9A9C"
+  - elementId: fig-flashkda-t14
+    elementType: text
+    bounds: [258.3, 257.6, 15.3, 9.3]
+    content:
+      text: |-
+        <p style="text-align: center;">空闲</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text16
+  - elementId: fig-flashkda-s15
+    elementType: shape
+    bounds: [284.5, 248.1, 26.2, 28.3]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t16
+    elementType: text
+    bounds: [284.5, 248.1, 26.2, 28.3]
+    content:
+      text: |-
+        <p style="text-align: center;">S2</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text17
+  - elementId: fig-flashkda-s17
+    elementType: shape
+    bounds: [317.2, 248.1, 24, 28.3]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#9A9A9C"
+  - elementId: fig-flashkda-t18
+    elementType: text
+    bounds: [321.5, 257.6, 15.3, 9.3]
+    content:
+      text: |-
+        <p style="text-align: center;">空闲</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text16
+  - elementId: fig-flashkda-s19
+    elementType: shape
+    bounds: [347.7, 248.1, 39.3, 28.3]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t20
+    elementType: text
+    bounds: [347.7, 248.1, 39.3, 28.3]
+    content:
+      text: |-
+        <p style="text-align: center;">C3</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text15
+  - elementId: fig-flashkda-t21
+    elementType: text
+    bounds: [395.7, 257.2, 61.8, 10.2]
+    content:
+      text: |-
+        <p style="text-align: left;">… 气泡 = 算力空置</p>
+      color: "#404040"
+      fontSize: 6
+      fontFamily: 黑体, 黑体
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: fig-flashkda-t22
+    elementType: text
+    bounds: [68.5, 284.5, 230.8, 10.2]
+    content:
+      text: |-
+        <p style="text-align: left;">C = chunk 内稠密 matmul（CUBE）　S = 跨 chunk 状态传播（Vector）</p>
+      color: "#404040"
+      fontSize: 6
+      bold: true
+      fontFamily: 黑体, 黑体
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: fig-flashkda-s23
+    elementType: shape
+    bounds: [46.7, 307, 405.7, 100.3]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t24
+    elementType: text
+    bounds: [55.4, 317.4, 280.1, 11.9]
+    content:
+      text: |-
+        <p style="text-align: left;">FlashKDA：intra-chunk 与跨 chunk 流水交叠（S 驻留 L1 / UB，双缓冲）</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text14
+  - elementId: fig-flashkda-t25
+    elementType: text
+    bounds: [55.4, 342.9, 19, 11]
+    content:
+      text: |-
+        <p style="text-align: left;">CUBE</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text17
+  - elementId: fig-flashkda-s26
+    elementType: shape
+    bounds: [86, 333.2, 32.7, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t27
+    elementType: text
+    bounds: [86, 333.2, 32.7, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">A·V1</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text18
+  - elementId: fig-flashkda-s28
+    elementType: shape
+    bounds: [119.8, 333.2, 21.8, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#A6C8EA"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t29
+    elementType: text
+    bounds: [119.8, 333.2, 21.8, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">UT1</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text19
+  - elementId: fig-flashkda-s30
+    elementType: shape
+    bounds: [143.8, 333.2, 32.7, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t31
+    elementType: text
+    bounds: [143.8, 333.2, 32.7, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">A·V2</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text18
+  - elementId: fig-flashkda-s32
+    elementType: shape
+    bounds: [177.6, 333.2, 21.8, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#A6C8EA"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t33
+    elementType: text
+    bounds: [177.6, 333.2, 21.8, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">UT2</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text19
+  - elementId: fig-flashkda-s34
+    elementType: shape
+    bounds: [201.6, 333.2, 32.7, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t35
+    elementType: text
+    bounds: [201.6, 333.2, 32.7, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">A·V3</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text18
+  - elementId: fig-flashkda-s36
+    elementType: shape
+    bounds: [235.4, 333.2, 21.8, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#A6C8EA"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t37
+    elementType: text
+    bounds: [235.4, 333.2, 21.8, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">UT3</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text19
+  - elementId: fig-flashkda-s38
+    elementType: shape
+    bounds: [259.4, 333.2, 32.7, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t39
+    elementType: text
+    bounds: [259.4, 333.2, 32.7, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">A·V4</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text18
+  - elementId: fig-flashkda-s40
+    elementType: shape
+    bounds: [293.2, 333.2, 21.8, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#A6C8EA"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t41
+    elementType: text
+    bounds: [293.2, 333.2, 21.8, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">UT4</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text19
+  - elementId: fig-flashkda-t42
+    elementType: text
+    bounds: [55.4, 377.8, 27, 11]
+    content:
+      text: |-
+        <p style="text-align: left;">Vector</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text17
+  - elementId: fig-flashkda-s43
+    elementType: shape
+    bounds: [86, 365.9, 28.4, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t44
+    elementType: text
+    bounds: [86, 365.9, 28.4, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">Γ</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text17
+  - elementId: fig-flashkda-t45
+    elementType: text
+    bounds: [88.5, 395, 23.3, 9.3]
+    content:
+      text: |-
+        <p style="text-align: center;">cumsum</p>
+      color: "#404040"
+      fontSize: 5.5
+      bold: true
+      fontFamily: Times New Roman, Times New Roman
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: fig-flashkda-s46
+    elementType: shape
+    bounds: [130.7, 365.9, 30.5, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t47
+    elementType: text
+    bounds: [130.7, 365.9, 30.5, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">S1</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text17
+  - elementId: fig-flashkda-s48
+    elementType: shape
+    bounds: [188.5, 365.9, 30.5, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t49
+    elementType: text
+    bounds: [188.5, 365.9, 30.5, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">S2</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text17
+  - elementId: fig-flashkda-s50
+    elementType: shape
+    bounds: [246.3, 365.9, 30.5, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-t51
+    elementType: text
+    bounds: [246.3, 365.9, 30.5, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">S3</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text17
+  - elementId: fig-flashkda-l52
+    elementType: line
+    bounds: [101.3, 358.3, 45.6, 5.3]
+    viewBox:
+      - 45.6
+      - 5.3
+    points: 1,1 1,4.3 44.6,4.3
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-l53
+    elementType: line
+    bounds: [145, 361.6, 2, 4.6]
+    viewBox:
+      - 2
+      - 4.6
+    points: 1,1 1,3.6
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-l54
+    elementType: line
+    bounds: [159.1, 358.3, 45.6, 5.3]
+    viewBox:
+      - 45.6
+      - 5.3
+    points: 1,1 1,4.3 44.6,4.3
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-l55
+    elementType: line
+    bounds: [202.8, 361.6, 2, 4.6]
+    viewBox:
+      - 2
+      - 4.6
+    points: 1,1 1,3.6
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-l56
+    elementType: line
+    bounds: [216.9, 358.3, 45.6, 5.3]
+    viewBox:
+      - 45.6
+      - 5.3
+    points: 1,1 1,4.3 44.6,4.3
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-l57
+    elementType: line
+    bounds: [260.6, 361.6, 2, 4.6]
+    viewBox:
+      - 2
+      - 4.6
+    points: 1,1 1,3.6
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-flashkda-s58
+    elementType: shape
+    bounds: [323.7, 328.8, 120, 69.8]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#7A7A7A"
+  - elementId: fig-flashkda-t59
+    elementType: text
+    bounds: [330.3, 336.1, 81.8, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">chunkwise 递推（C = 64）</p>
+      color: $dk1
+      fontSize: 5.5
+      bold: true
+      fontFamily: 黑体, 黑体
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: fig-flashkda-t60
+    elementType: text
+    bounds: [330.3, 350.3, 138.5, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">\(S_{i}=(I-β_{i}k_{i}k_{i}^{⊤})Diag(α_{i})S_{i-1}\) </p>
+      color: $dk1
+      fontSize: 5.5
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: fig-flashkda-t61
+    elementType: text
+    bounds: [330.3, 362.3, 57.2, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">\(+β_{i}k_{i}v_{i}^{⊤}\) </p>
+      color: $dk1
+      fontSize: 5.5
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: fig-flashkda-t62
+    elementType: text
+    bounds: [330.3, 376.4, 98.5, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">对角块：有界衰减 → 稠密 matmul</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text20
+  - elementId: fig-flashkda-t63
+    elementType: text
+    bounds: [330.3, 388.4, 112, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">跨 chunk：小矩阵 rank-1 更新，串行</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text20
+  - elementId: param-label
+    elementType: text
+    bounds: [488, 180, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">各阶段负载与昇腾诉求</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: param-table
+    elementType: table
+    bounds: [488, 208, 436, 216]
+    columnWidths:
+      - 0.2
+      - 0.25
+      - 0.16
+      - 0.39
+    rowHeights:
+      - 0.07999994167399994
+      - 0.15399996062994997
+      - 0.15300003426652503
+      - 0.15300003426652503
+      - 0.15300003426652503
+      - 0.15300003426652503
+      - 0.15399996062994997
+    rows:
+      - - text: |-
+            <p style="text-align: left;">阶段</p>
+        - text: |-
+            <p style="text-align: left;">张量形状</p>
+        - text: |-
+            <p style="text-align: left;">FLOPs/token</p>
+        - text: |-
+            <p style="text-align: left;">负载特征 → 昇腾诉求</p>
+      - - text: |-
+            <p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">chunk 内注意力 </span>\(AV\)</p>
+          color: "#333333"
+        - text: |-
+            <p style="text-align: left;">\([C,d_{k}]×[d_{k},C]×[C,d_{v}]\)<span style="font-size: 8px;"> </span></p><p style="text-align: left;">\(C=64\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(2C(d_{k}+d_{v})\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 稠密 matmul → 要求 CUBE 算力</p><p style="text-align: left;">• tile 64×128 → 匹配 CUBE 分块</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">跨 chunk 读取 </span>\((Γ⊙Q)S\)</p>
+          color: "#333333"
+        - text: |-
+            <p style="text-align: left;">\([C,d_{k}]×[d_{k},d_{v}]\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(2d_{k}d_{v}\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 小矩阵乘 → CUBE 利用率低</p><p style="text-align: left;">• 与 chunk 内计算双缓冲交叠 → 调度诉求</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">状态更新 </span>\(S←MS+K^{⊤}V\)</p>
+          color: "#333333"
+        - text: |-
+            <p style="text-align: left;">\([d_{k},d_{k}]×[d_{k},d_{v}]\)<span style="font-size: 8px;"> </span></p><p style="text-align: left;">\([d_{k},C]×[C,d_{v}]\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(≈3d_{k}d_{v}\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 串行依赖 → 并行度受限</p><p style="text-align: left;">• S 驻留片上 → 避免 HBM 往返</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">累积衰减 Γ</p>
+          color: "#262626"
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;">\([C,d_{k}]\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;"> / head，log 空间 cumsum</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(O(Cd_{k})\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">，逐元素</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 纯 Vector 逐元素</p><p style="text-align: left;">• 与 CUBE matmul 构成异构流水</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">UT 变换（W / U）</p>
+          color: "#262626"
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;">\([C,C]\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;"> 三角求逆 + 小 matmul</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(O(Cd_{k})\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 小尺寸 matmul → CUBE 效率受限</p><p style="text-align: left;">• 宜融合进主 kernel</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">SM 级 CP planner</p>
+          color: "#262626"
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;">\(M∈R^{d_{k}×d_{k}}\)<span style="font-size: 8px;"> </span></p><p style="text-align: left;">\(S∈R^{d_{k}×d_{v}}\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">合并 </span>\(2d_{k}^{2}d_{v}\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;"> / 段</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 单设备内切分并行 → 无通信</p><p style="text-align: left;">• AICore 级调度需求</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+    style: $table1
+  - elementId: param-note
+    elementType: text
+    bounds: [488, 430, 436, 22]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.35;"><span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">片上驻留：S 为 </span>\(d_{k}×d_{v}\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;"> / head（</span>\(d_{k}=d_{v}=128\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;"> 时 32KB / head，BF16），单核多 head 驻留能力决定流水深度。</span></p><p style="text-align: left; line-height: 1.35;"><span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">注：</span>\(C=64\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">（FLA 默认 chunk size）；</span>\(d_{k}\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;"> / </span>\(d_{v}\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;"> 以 checkpoint config 为准；FLOPs 为按 chunkwise 公式推算。</span></p>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text12
+  - elementId: dev-label
+    elementType: text
+    bounds: [44, 446, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">开发需求与趋势思考</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: dev-bullets
+    elementType: text
+    bounds: [44, 466, 876, 68]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><strong>昇腾现状</strong>：vllm-ascend 为 Triton 版 chunk_kda（scaled_dot_kkt / solve_tril / wy_fast / chunk_delta_h / chunk_o 等多 kernel 串行调度），kernel 间显存往返多、串行段无掩盖，与 FlashKDA 存在代差</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>需求①</strong>：Ascend C 融合 chunkwise 算子 —— intra-chunk matmul 上 CUBE，状态传播与计算双缓冲流水，S 驻留 L1 / UB 避免 HBM 往返</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>需求②</strong>：SM 级 CP planner 的 NPU 对等实现 —— AICore 级序列切分、段转移并行求值与前缀合并，适配昇腾核间同步机制</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>趋势</strong>：线性注意力 prefill 算子的竞争点是串行段掩盖率；Cube / Vector 异构流水 + 片上状态驻留是达成路径，DSL（TileLang 类）可缩短开发周期</li></ul>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text13

@@ -1,0 +1,195 @@
+version: v2
+title: kimi_k3_arch_analysis
+theme:
+  colors:
+    dk1: "#000000"
+    lt1: "#FFFFFF"
+    dk2: "#1F2937"
+    lt2: "#F3F4F6"
+    accent1: "#4472C4"
+    accent2: "#ED7D31"
+    accent3: "#A5A5A5"
+    accent4: "#FFC000"
+    accent5: "#5B9BD5"
+    accent6: "#70AD47"
+    hlink: "#0563C1"
+    folHlink: "#954F72"
+  textStyles:
+    text1:
+      color: "#737373"
+      fontSize: 8
+      fontFamily: 微软雅黑, 微软雅黑
+    text2:
+      color: "#C00000"
+      fontSize: 18
+      fontFamily: 微软雅黑, 微软雅黑
+      bold: true
+    text3:
+      color: $lt1
+      fontSize: 14
+      fontFamily: 微软雅黑, 微软雅黑
+      bold: true
+    text4:
+      color: $dk1
+      fontSize: 9
+      fontFamily: 微软雅黑, 微软雅黑
+      lineHeight: 1.35
+    text5:
+      color: "#C00000"
+      fontSize: 12
+      fontFamily: 微软雅黑, 微软雅黑
+      bold: true
+    text6:
+      color: $dk1
+      fontSize: 4
+      fontFamily: Times New Roman, Times New Roman
+    text7:
+      color: $dk1
+      fontSize: 5.5
+      fontFamily: Times New Roman, Times New Roman
+      italic: true
+    text8:
+      color: $dk1
+      fontSize: 4.5
+      fontFamily: Times New Roman, Times New Roman
+    text9:
+      color: "#C00000"
+      fontSize: 5
+      fontFamily: 黑体, 黑体
+      bold: true
+    text10:
+      color: "#B92621"
+      fontSize: 4.5
+      fontFamily: Times New Roman, Times New Roman
+      italic: true
+    text11:
+      color: $dk1
+      fontSize: 4
+      fontFamily: Times New Roman, Times New Roman
+      italic: true
+    text12:
+      color: $dk1
+      fontSize: 7.5
+      fontFamily: 微软雅黑, 微软雅黑
+      lineHeight: 1.35
+    text13:
+      color: "#262626"
+      fontSize: 8
+      fontFamily: 微软雅黑, 微软雅黑
+      lineHeight: 1.35
+    text14:
+      color: $dk1
+      fontSize: 7
+      fontFamily: 黑体, 黑体
+      bold: true
+    text15:
+      color: "#1F2A36"
+      fontSize: 6.5
+      fontFamily: Times New Roman, Times New Roman
+    text16:
+      color: "#9A9A9C"
+      fontSize: 5.5
+      fontFamily: 黑体, 黑体
+    text17:
+      color: $dk1
+      fontSize: 6.5
+      fontFamily: Times New Roman, Times New Roman
+    text18:
+      color: "#1F2A36"
+      fontSize: 6
+      fontFamily: Times New Roman, Times New Roman
+    text19:
+      color: "#1F2A36"
+      fontSize: 5.5
+      fontFamily: Times New Roman, Times New Roman
+    text20:
+      color: $dk1
+      fontSize: 5.5
+      fontFamily: 黑体, 黑体
+    text21:
+      color: $dk1
+      fontSize: 6
+      fontFamily: 黑体, 黑体
+    text22:
+      color: "#1F2A36"
+      fontSize: 6
+      fontFamily: 黑体, 黑体
+    text23:
+      color: "#404040"
+      fontSize: 5.5
+      fontFamily: 黑体, 黑体
+      bold: true
+    text24:
+      color: $dk1
+      fontSize: 6
+      fontFamily: Times New Roman, Times New Roman
+  tableStyles:
+    table1:
+      cellStyle:
+        align:
+          - left
+          - middle
+      firstRowStyle:
+        color: "#262626"
+        fontSize: 8
+        fontFamily: 微软雅黑, 微软雅黑
+        bold: true
+        fill:
+          type: solid
+          color: "#F5F5F5"
+        border:
+          - null
+          - null
+          - style: solid
+            width: 1
+            color: "#737373"
+          - null
+      firstColumnStyle:
+        fontFamily: 微软雅黑, 微软雅黑
+        border:
+          - null
+          - null
+          - style: solid
+            width: 0.75
+            color: "#D4D4D4"
+          - null
+      rowOverColumn: true
+    table2:
+      cellStyle:
+        align:
+          - left
+          - middle
+      firstRowStyle:
+        color: "#262626"
+        fontSize: 8
+        fontFamily: 微软雅黑, 微软雅黑
+        bold: true
+        fill:
+          type: solid
+          color: "#F5F5F5"
+        border:
+          - null
+          - null
+          - style: solid
+            width: 1
+            color: "#737373"
+          - null
+      firstColumnStyle:
+        color: "#262626"
+        fontSize: 8
+        fontFamily: 微软雅黑, 微软雅黑
+        border:
+          - null
+          - null
+          - style: solid
+            width: 0.75
+            color: "#D4D4D4"
+          - null
+      rowOverColumn: true
+size: [960, 540]
+pages:
+  - pages/page-1.page
+  - pages/page-2.page
+  - pages/page-3.page
+  - pages/page-4.page
+  - pages/page-5.page

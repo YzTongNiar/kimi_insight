@@ -1,0 +1,421 @@
+pageType: content
+background:
+  type: solid
+  color: $lt1
+elements:
+  - elementId: source-note
+    elementType: text
+    bounds: [400, 14, 524, 14]
+    content:
+      text: |-
+        <p style="text-align: right;">资料来源：REPORT_综合分析报告 §3 / §6.2–6.3b；流水比率 mac/mte/vec 为 %（MIX 核双流水可 &gt;100%）</p>
+      wrap: false
+      align:
+        - right
+        - middle
+      style: $text1
+  - elementId: title
+    elementType: text
+    bounds: [44, 18, 880, 30]
+    content:
+      text: |-
+        <p style="text-align: left;">算子侧分析：TOP5 算子 bound 画像与融合算子优化</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text2
+  - elementId: concl-label-bg
+    elementType: shape
+    bounds: [44, 58, 88, 96]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#C00000"
+  - elementId: concl-label
+    elementType: text
+    bounds: [44, 58, 88, 96]
+    content:
+      text: |-
+        <p style="text-align: center;">分析</p><p style="text-align: center;">结论</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text3
+  - elementId: concl-body-bg
+    elementType: shape
+    bounds: [140, 58, 784, 96]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#F2F2F2"
+  - elementId: concl-bullets
+    elementType: text
+    bounds: [154, 63, 756, 86]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><span style="color: #262626;"><strong>D 侧 TOP5</strong>：访存 3 席——GroupedMatmulSituQuant 10.39ms 居首（mte 185% vs mac 53%，Cube 未喂饱）；<strong>P 侧 TOP5</strong>：通信占前两席（all2all 271.3ms + KV broadcast ~228ms×4）</span></li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><span style="color: #262626;"><strong>融合算子是 A5 新栈的结构性收益来源</strong>：MoE 量化融入组矩阵乘（每层专家核 4→3）、MLA 量化分段双核、attn-residual 原生融合（−38%）</span></li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><span style="color: #262626;"><strong>融合的本质收益</strong>：省核启动与显存往返，并为 Cube/Vector 流水掩盖（CV 掩盖）与通算融合释放调度空间</span></li></ul>
+      wrap: true
+      align:
+        - left
+        - middle
+      style: $text4
+  - elementId: d-label
+    elementType: text
+    bounds: [44, 162, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">D 侧 TOP5（ep32，ms/步）</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: p-label
+    elementType: text
+    bounds: [496, 162, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">P 侧 TOP5（A3_p，ms/前向）</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: d-table
+    elementType: table
+    bounds: [44, 182, 428, 148]
+    columnWidths:
+      - 0.07
+      - 0.38
+      - 0.14
+      - 0.13
+      - 0.28
+    rowHeights:
+      - 0.12
+      - 0.176
+      - 0.176
+      - 0.176
+      - 0.176
+      - 0.176
+    rows:
+      - - text: |-
+            <p style="text-align: left;">#</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">算子</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">ms/步</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">bound</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">mac/mte/vec %</p>
+          fontSize: 7
+      - - text: |-
+            <p style="text-align: left;">1</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">GroupedMatmulSituQuant</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">10.39</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;"><strong>访存</strong></p>
+          fontSize: 7
+          color: "#B45309"
+          fill:
+            type: solid
+            color: "#FEF3C7"
+        - text: |-
+            <p style="text-align: left;">53/185/68</p>
+          fontSize: 7
+      - - text: |-
+            <p style="text-align: left;">2</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">MatMulV3Common</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">6.59</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;"><strong>访存</strong></p>
+          fontSize: 7
+          color: "#B45309"
+          fill:
+            type: solid
+            color: "#FEF3C7"
+        - text: |-
+            <p style="text-align: left;">36/99/0</p>
+          fontSize: 7
+      - - text: |-
+            <p style="text-align: left;">3</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">FlashMla big_quant + small_bf16</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">5.15+1.23</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;"><strong>计算</strong></p>
+          fontSize: 7
+          color: "#15803D"
+          fill:
+            type: solid
+            color: "#DCFCE7"
+        - text: |-
+            <p style="text-align: left;">59/41（合计）</p>
+          fontSize: 7
+      - - text: |-
+            <p style="text-align: left;">4</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">GroupedMatmulWeightNz</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">5.53</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;"><strong>访存</strong></p>
+          fontSize: 7
+          color: "#B45309"
+          fill:
+            type: solid
+            color: "#FEF3C7"
+        - text: |-
+            <p style="text-align: left;">49/173/65</p>
+          fontSize: 7
+      - - text: |-
+            <p style="text-align: left;">5</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">SituMxQuant</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">5.46</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;"><strong>计算</strong></p>
+          fontSize: 7
+          color: "#15803D"
+          fill:
+            type: solid
+            color: "#DCFCE7"
+        - text: |-
+            <p style="text-align: left;">0/21/29</p>
+          fontSize: 7
+    style: $tbl
+  - elementId: p-table
+    elementType: table
+    bounds: [496, 182, 428, 148]
+    columnWidths:
+      - 0.07
+      - 0.38
+      - 0.14
+      - 0.13
+      - 0.28
+    rowHeights:
+      - 0.12
+      - 0.176
+      - 0.176
+      - 0.176
+      - 0.176
+      - 0.176
+    rows:
+      - - text: |-
+            <p style="text-align: left;">#</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">算子</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">ms/前向</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">bound</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">mac/mte/vec %</p>
+          fontSize: 7
+      - - text: |-
+            <p style="text-align: left;">1</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">all2all（AivKernel ≡ alltoallv）</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">271.3</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;"><strong>通信</strong></p>
+          fontSize: 7
+          color: "#B91C1C"
+          fill:
+            type: solid
+            color: "#FEE2E2"
+        - text: |-
+            <p style="text-align: left;">—/64/—</p>
+          fontSize: 7
+      - - text: |-
+            <p style="text-align: left;">2</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">GroupedMatmulWeightNz</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">232.8</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;"><strong>访存</strong></p>
+          fontSize: 7
+          color: "#B45309"
+          fill:
+            type: solid
+            color: "#FEF3C7"
+        - text: |-
+            <p style="text-align: left;">37/150/11</p>
+          fontSize: 7
+      - - text: |-
+            <p style="text-align: left;">3</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">hcom_broadcast ×4（KV 广播）</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">~228 each</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;"><strong>通信</strong></p>
+          fontSize: 7
+          color: "#B91C1C"
+          fill:
+            type: solid
+            color: "#FEE2E2"
+        - text: |-
+            <p style="text-align: left;">—</p>
+          fontSize: 7
+      - - text: |-
+            <p style="text-align: left;">4</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">ChunkKdaFwd</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">222.2</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;"><strong>计算</strong></p>
+          fontSize: 7
+          color: "#15803D"
+          fill:
+            type: solid
+            color: "#DCFCE7"
+        - text: |-
+            <p style="text-align: left;">1/16/16（vec）</p>
+          fontSize: 7
+      - - text: |-
+            <p style="text-align: left;">5</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">QuantMatmulWeightNz V3</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;">156.2</p>
+          fontSize: 7
+        - text: |-
+            <p style="text-align: left;"><strong>访存</strong></p>
+          fontSize: 7
+          color: "#B45309"
+          fill:
+            type: solid
+            color: "#FEF3C7"
+        - text: |-
+            <p style="text-align: left;">50/125/23</p>
+          fontSize: 7
+    style: $tbl
+  - elementId: fusion-label
+    elementType: text
+    bounds: [44, 342, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">融合算子优化（dspark7 基线 → A5）</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: fusion-table
+    elementType: table
+    bounds: [44, 362, 880, 104]
+    columnWidths:
+      - 0.2
+      - 0.52
+      - 0.28
+    rowHeights:
+      - 0.14
+      - 0.2866
+      - 0.2866
+      - 0.2868
+    rows:
+      - - text: |-
+            <p style="text-align: left;">融合算子优化</p>
+        - text: |-
+            <p style="text-align: left;">基线 dspark7 → A5 ep32</p>
+        - text: |-
+            <p style="text-align: left;">收益</p>
+      - - text: |-
+            <p style="text-align: left;"><strong>F1 MoE 激活量化融入组矩阵乘</strong></p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><span style="color: #B91C1C;">SituMxQuant + GroupedMatmulWeightNz 分立</span> → <span style="color: #15803D;">GroupedMatmulSituQuant</span>（Situ 量化融进组矩阵乘核）</p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><strong>每层专家核 4→3</strong>；独立 Situ 量化 184→92 次/步（12.07→5.46ms）</p>
+          fontSize: 7.5
+      - - text: |-
+            <p style="text-align: left;"><strong>F2 MLA 单核 → 量化分段双核</strong></p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><span style="color: #B91C1C;">FusedInferAttentionScore 全 bf16 单核扫全量 KV</span> → <span style="color: #15803D;">FlashMla big_quant + small_bf16 + LSE 合并</span>，KV 在线量化</p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;">「量化长历史 + bf16 近端」双段，长历史段走量化 cache</p>
+          fontSize: 7.5
+      - - text: |-
+            <p style="text-align: left;"><strong>F3 attn-residual 原生融合</strong></p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><span style="color: #B91C1C;">_apply_attn_res_kernel（triton）</span> → <span style="color: #15803D;">AttnResFwdFused（CANN 原生）</span></p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><strong>2.70→1.66ms（−38%）</strong></p>
+          fontSize: 7.5
+    style: $tbl
+  - elementId: view-label
+    elementType: text
+    bounds: [44, 478, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">专家观点</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: view-bullets
+    elementType: text
+    bounds: [44, 496, 876, 40]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><strong>融合算子是推理性能的主战场</strong>：单核算力见顶后，收益来自核间融合——F1 一处融合即省 25% 专家核数，同时省掉量化中间结果的显存往返</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>通算融合是下一个确定性方向</strong>：通信已占 P 侧 55%、D 侧 15%，把 a2a/RS/AG 与计算算子融合编排、让通信藏在 Cube 计算背后，收益大于任何单算子调优</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>CV 掩盖决定算子利用上限</strong>：FlashMla 小核 scalar 23.5% &gt; mac 21.2% 说明 Cube/Vector 双流水未打满——融合算子设计必须为 CV 掩盖预留流水空间</li></ul>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text13

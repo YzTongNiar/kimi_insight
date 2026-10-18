@@ -1,0 +1,996 @@
+pageType: content
+background:
+  type: solid
+  color: $lt1
+notes: |-
+  本页讲 24+1 层 Gated MLA（报告 §2.1.2），在混合架构里承担不受限的全局内容交互。MLA 的基本思想是把每 token 的 KV 压缩成低维隐向量 c_t 缓存，注意力时经上投影重建 K/V。
+  左图红框是 K3 相对标准 MLA 的两处改动。改动一是全面 NoPE：MLA 层不施加任何显式位置编码，位置与近因感知完全交给 KDA 递归层——长上下文外推不再受 RoPE 基频或 YaRN 限制，且 KV Cache 不含 rope 分量，单 token 缓存进一步减小。改动二是与 KDA 同款的全秩输出门，逐通道调节全局注意力读出，新增一次标准稠密 GEMM。训练侧还有一个细节：注意力输出保持 FP32 以修正 flash attention 的舍入偏差，代价是输出 tile 片上占用翻倍，靠 buffer 重排与 KV staging 交叠换回深流水和高吞吐。
+  这里展开 Gated MLA 的完整计算流程。第一步下投影：每 token 的输入 x_t 经 W_c 压成低维隐向量 c_t（dc 维，远小于 H·dh），KV Cache 只存 c_t——这是 MLA 压缩的核心：标准 MHA 每层每 token 要存 2·H·dh 个元素，MLA 只存 dc（K2 参考值 512，约为原来的 1/40），K3 全面 NoPE 后再省掉 rope 分量。第二步注意力计算：prefill 和训练时把 c_t 上投影重建 k_t、v_t，再做标准多头注意力，不加任何位置编码，位置感知完全交给 KDA 层；decode 时把上投影"吸收"进 q 侧的投影矩阵，直接以 c_t 参与计算，KV 读取量从 H·dh 降回 dc，这是 MLA decode 省带宽的关键。第三步输出：注意力输出 õ 经与 KDA 同款的全秩输出门 y = W_o[σ(W_g·x) ⊙ õ] 调节后投回 d 维。整个流程的主体是稠密 GEMM，CUBE 亲和；唯一随 L 线性增长的是 c_t 缓存，所以 MLA 层的硬件诉求集中在 KV Cache 的容量与带宽，以及吸收矩阵的 GEMV 效率。
+  对应右表看诉求：下投影和 Q/K/V 投影都是稠密 GEMM，Prefill 要求 CUBE 算力、Decode 要求 HBM 带宽；关键优化点是 Decode 阶段"吸收"上投影、直接以 c_t 计算，KV 读取量大幅下降；KV Cache 随 L 线性增长，是 1M 上下文下的主要显存项，NoPE 让单 token 缓存更小、容量诉求相应下降。
+  对开发的启发：推理侧 vllm-ascend 已有 mla_v1 后端可复用，重点是 qk_rope_head_dim=0 配置下各后端（含量化路径）的回归验证，以及输出门与注意力输出的融合；趋势上硬件诉求集中在 KV Cache 容量/带宽与吸收矩阵 GEMV 效率。
+  最后看页面底部的开发需求与趋势。推理算子层：MLA 已接入 vllm-ascend 的 mla_v1 后端，kimi_k3 适配层强制 use_nope=True 并透传 output gate，需要回归验证 qk_rope_head_dim=0 配置下各后端（包括量化路径）的正确性。算子融合：输出门 σ(W_g·x)⊙õ 应与注意力输出及 W_o 融合，避免三次显存往返；训练侧 FP32 输出 tile 需要 Ascend C 级的 buffer 规划，与 KV staging 交叠。框架层：KV Cache 按每 token d_c×2B 分页，与 KDA checkpoint 统一池化；PD 分离部署下 NoPE 缓存更小，跨节点传输负载相应下降。趋势判断：NoPE 把位置建模完全交给递归层，长上下文外推不再受 RoPE 限制；硬件诉求集中在 KV Cache 的容量与带宽，以及吸收矩阵的 GEMV 效率。
+elements:
+  - elementId: source-note
+    elementType: text
+    bounds: [400, 14, 524, 14]
+    content:
+      text: |-
+        <p style="text-align: right;">资料来源：Kimi K3 Technical Report §2.1.2；vllm / vllm-ascend 代码仓</p>
+      wrap: false
+      align:
+        - right
+        - middle
+      style: $text1
+  - elementId: title
+    elementType: text
+    bounds: [44, 18, 880, 30]
+    content:
+      text: |-
+        <p style="text-align: left;">Gated MLA：NoPE 全局注意力 + 全秩输出门</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text2
+  - elementId: concl-label-bg
+    elementType: shape
+    bounds: [44, 58, 88, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#C00000"
+  - elementId: concl-label
+    elementType: text
+    bounds: [44, 58, 88, 110]
+    content:
+      text: |-
+        <p style="text-align: center;">分析</p><p style="text-align: center;">结论</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text3
+  - elementId: concl-body-bg
+    elementType: shape
+    bounds: [140, 58, 784, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#F2F2F2"
+  - elementId: concl-bullets
+    elementType: text
+    bounds: [154, 63, 756, 100]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>结构定位</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：三步计算——下投影 </span>\(c_{t}=W_{c}x_{t}\)<span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"> 缓存低维隐向量，注意力时 </span>\(k_{t},v_{t}=W_{k,v}c_{t}\)<span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"> 重建（decode 吸收上投影直接以 </span>\(c_{t}\)<span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"> 计算），输出门 </span>\(y=W_{o}[σ(W_{g}x)⊙o]\)<span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">；24+1 层承担全局交互 → 缓存规模降一个量级</span></li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>改动① 全面 NoPE</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：位置建模完全交给 KDA 递归层 → 上下文外推不受 RoPE 限制，单 token 缓存进一步减小</span></li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>改动② 全秩输出门</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：与 KDA 同款门控，逐通道调节全局注意力读出 → 新增一次标准稠密 GEMM，CUBE 友好</span></li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>训练数值</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：注意力输出保持 FP32 修正舍入偏差 → 以片上 buffer 重排换精度与吞吐兼得</span></li></ul>
+      wrap: true
+      align:
+        - left
+        - middle
+      style: $text4
+  - elementId: arch-label
+    elementType: text
+    bounds: [44, 180, 200, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">模块结构与数据流</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: legend-box
+    elementType: shape
+    bounds: [230, 183, 10, 10]
+    shapeName: rect
+    fill:
+      type: solid
+      color: $lt1
+    border:
+      style: solid
+      width: 1
+      color: "#C00000"
+  - elementId: legend-text
+    elementType: text
+    bounds: [244, 180, 240, 14]
+    content:
+      text: |-
+        <p style="text-align: left;">红框 = K3 相对标准 MLA（K2）的改动</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text1
+  - elementId: fig-gated_mla-s1
+    elementType: shape
+    bounds: [46.7, 208.9, 218.1, 196.2]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-l2
+    elementType: line
+    bounds: [154.8, 391, 2, 15.1]
+    viewBox:
+      - 2
+      - 15.1
+    points: 1,14.1 1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-l3
+    elementType: line
+    bounds: [89.3, 391, 132.9, 2]
+    viewBox:
+      - 132.9
+      - 2
+    points: 1,1 131.9,1
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-l4
+    elementType: line
+    bounds: [89.3, 386.7, 2, 6.4]
+    viewBox:
+      - 2
+      - 6.4
+    points: 1,5.4 1,1
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-l5
+    elementType: line
+    bounds: [150.4, 386.7, 2, 6.4]
+    viewBox:
+      - 2
+      - 6.4
+    points: 1,5.4 1,1
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-l6
+    elementType: line
+    bounds: [220.2, 386.7, 2, 6.4]
+    viewBox:
+      - 2
+      - 6.4
+    points: 1,5.4 1,1
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-s7
+    elementType: shape
+    bounds: [77, 376.5, 30.5, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6DAD6"
+  - elementId: fig-gated_mla-s8
+    elementType: shape
+    bounds: [75.1, 374.6, 30.5, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6D2CE"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t9
+    elementType: text
+    bounds: [75.1, 374.6, 30.5, 13.1]
+    content:
+      text: |-
+        <p style="text-align: center;">Linear</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text6
+  - elementId: fig-gated_mla-l10
+    elementType: line
+    bounds: [89.3, 314.7, 2, 60.9]
+    viewBox:
+      - 2
+      - 60.9
+    points: 1,59.9 1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t11
+    elementType: text
+    bounds: [93, 341.6, 6.4, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">q</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text7
+  - elementId: fig-gated_mla-s12
+    elementType: shape
+    bounds: [138.1, 376.5, 30.5, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6DAD6"
+  - elementId: fig-gated_mla-s13
+    elementType: shape
+    bounds: [136.1, 374.6, 30.5, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6D2CE"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t14
+    elementType: text
+    bounds: [136.1, 374.6, 30.5, 13.1]
+    content:
+      text: |-
+        <p style="text-align: center;">Linear</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text6
+  - elementId: fig-gated_mla-l15
+    elementType: line
+    bounds: [150.4, 364.9, 2, 10.7]
+    viewBox:
+      - 2
+      - 10.7
+    points: 1,9.7 1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-s16
+    elementType: shape
+    bounds: [135.9, 354.7, 34.9, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#E6E6E8"
+  - elementId: fig-gated_mla-s17
+    elementType: shape
+    bounds: [134, 352.8, 34.9, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F2F2F3"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t18
+    elementType: text
+    bounds: [133.7, 356.3, 35.3, 6]
+    content:
+      text: |-
+        <p style="text-align: center;">\(c_{t}\)<span style="font-family: Times New Roman, Times New Roman;"> (KV Cache)</span></p>
+      color: $dk1
+      fontSize: 3.5
+      fontFamily: Times New Roman, Times New Roman
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: fig-gated_mla-l19
+    elementType: line
+    bounds: [137.3, 343.1, 6.4, 10.7]
+    viewBox:
+      - 6.4
+      - 10.7
+    points: 5.4,9.7 1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-l20
+    elementType: line
+    bounds: [159.1, 343.1, 6.4, 10.7]
+    viewBox:
+      - 6.4
+      - 10.7
+    points: 1,9.7 5.4,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-s21
+    elementType: shape
+    bounds: [122.8, 332.9, 26.2, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6DAD6"
+  - elementId: fig-gated_mla-s22
+    elementType: shape
+    bounds: [120.9, 331, 26.2, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6D2CE"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t23
+    elementType: text
+    bounds: [120.9, 331, 26.2, 13.1]
+    content:
+      text: |-
+        <p style="text-align: center;">\(W^{UK}\) </p>
+      color: $dk1
+      fontSize: 4
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: fig-gated_mla-s24
+    elementType: shape
+    bounds: [157.7, 332.9, 26.2, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6DAD6"
+  - elementId: fig-gated_mla-s25
+    elementType: shape
+    bounds: [155.8, 331, 26.2, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6D2CE"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t26
+    elementType: text
+    bounds: [155.8, 331, 26.2, 13.1]
+    content:
+      text: |-
+        <p style="text-align: center;">\(W^{UV}\) </p>
+      color: $dk1
+      fontSize: 4
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: fig-gated_mla-l27
+    elementType: line
+    bounds: [133, 314.7, 2, 17.3]
+    viewBox:
+      - 2
+      - 17.3
+    points: 1,16.3 1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-l28
+    elementType: line
+    bounds: [167.9, 314.7, 2, 17.3]
+    viewBox:
+      - 2
+      - 17.3
+    points: 1,16.3 1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t29
+    elementType: text
+    bounds: [130.9, 318.7, 6.4, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">k</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text7
+  - elementId: fig-gated_mla-t30
+    elementType: text
+    bounds: [165.8, 318.7, 6.4, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">v</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text7
+  - elementId: fig-gated_mla-s31
+    elementType: shape
+    bounds: [207.9, 376.5, 30.5, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6DAD6"
+  - elementId: fig-gated_mla-s32
+    elementType: shape
+    bounds: [205.9, 374.6, 30.5, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6D2CE"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t33
+    elementType: text
+    bounds: [205.9, 374.6, 30.5, 13.1]
+    content:
+      text: |-
+        <p style="text-align: center;">Linear</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text6
+  - elementId: fig-gated_mla-s34
+    elementType: shape
+    bounds: [216.6, 356.9, 9.2, 9.2]
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: $lt1
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t35
+    elementType: text
+    bounds: [216.6, 356.9, 9.2, 9.2]
+    content:
+      text: |-
+        <p style="text-align: center;">σ</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text8
+  - elementId: fig-gated_mla-l36
+    elementType: line
+    bounds: [220.2, 365.1, 2, 10.5]
+    viewBox:
+      - 2
+      - 10.5
+    points: 1,9.5 1,1
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-l37
+    elementType: line
+    bounds: [142.3, 279.8, 79.9, 78.1]
+    viewBox:
+      - 79.9
+      - 78.1
+    points: 78.9,77.1 78.9,1 1,1
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-s38
+    elementType: shape
+    bounds: [202.7, 370.2, 39.3, 20.7]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.8
+      color: "#C00000"
+  - elementId: fig-gated_mla-t39
+    elementType: text
+    bounds: [244.1, 376.9, 6.1, 8.5]
+    content:
+      text: |-
+        <p style="text-align: left;">②</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text9
+  - elementId: fig-gated_mla-s40
+    elementType: shape
+    bounds: [64.2, 293.9, 144, 21.8]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t41
+    elementType: text
+    bounds: [64.2, 293.9, 144, 21.8]
+    content:
+      text: |-
+        <p style="text-align: center;">Gated MLA Attention</p>
+      color: $dk1
+      fontSize: 5.5
+      fontFamily: Times New Roman, Times New Roman
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: fig-gated_mla-s42
+    elementType: shape
+    bounds: [59.8, 289.6, 157, 30.5]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.8
+      color: "#C00000"
+  - elementId: fig-gated_mla-t43
+    elementType: text
+    bounds: [66.4, 282.9, 40.2, 6.8]
+    content:
+      text: |-
+        <p style="text-align: left;">① NoPE（全部头）</p>
+      color: "#C00000"
+      fontSize: 4
+      bold: true
+      fontFamily: 黑体, 黑体
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: fig-gated_mla-l44
+    elementType: line
+    bounds: [135.1, 285.9, 2, 9]
+    viewBox:
+      - 2
+      - 9
+    points: 1,8 1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-s45
+    elementType: shape
+    bounds: [130, 274.7, 12.2, 12.2]
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: $lt1
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-l46
+    elementType: line
+    bounds: [131.8, 276.5, 8.7, 8.7]
+    viewBox:
+      - 8.7
+      - 8.7
+    points: 1,7.7 7.7,1
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-l47
+    elementType: line
+    bounds: [131.8, 276.5, 8.7, 8.7]
+    viewBox:
+      - 8.7
+      - 8.7
+    points: 1,1 7.7,7.7
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-l48
+    elementType: line
+    bounds: [135.1, 262.4, 2, 13.3]
+    viewBox:
+      - 2
+      - 13.3
+    points: 1,12.3 1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-s49
+    elementType: shape
+    bounds: [109.8, 252.3, 56.7, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6DAD6"
+  - elementId: fig-gated_mla-s50
+    elementType: shape
+    bounds: [107.8, 250.3, 56.7, 13.1]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6D2CE"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t51
+    elementType: text
+    bounds: [107.8, 250.3, 56.7, 13.1]
+    content:
+      text: |-
+        <p style="text-align: center;"><span style="font-family: Times New Roman, Times New Roman;">Linear </span>\(W^{O}\)</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text8
+  - elementId: fig-gated_mla-l52
+    elementType: line
+    bounds: [135.1, 214.4, 2, 36.9]
+    viewBox:
+      - 2
+      - 36.9
+    points: 1,35.9 1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-gated_mla-t53
+    elementType: text
+    bounds: [141.6, 219.9, 15.3, 8.5]
+    content:
+      text: |-
+        <p style="text-align: left;">\(y_{t}\) </p>
+      color: $dk1
+      fontSize: 5
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: fig-gated_mla-t54
+    elementType: text
+    bounds: [168.9, 227.3, 38.2, 6.8]
+    content:
+      text: |-
+        <p style="text-align: left;">③ 训练输出 FP32</p>
+      color: "#C00000"
+      fontSize: 4
+      bold: true
+      fontFamily: 黑体, 黑体
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: param-label
+    elementType: text
+    bounds: [488, 180, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">参数、FLOPs 与昇腾诉求</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: param-table
+    elementType: table
+    bounds: [488, 208, 436, 216]
+    columnWidths:
+      - 0.2
+      - 0.25
+      - 0.16
+      - 0.39
+    rowHeights:
+      - 0.07999994167399994
+      - 0.15399996062994997
+      - 0.15300003426652503
+      - 0.15300003426652503
+      - 0.15300003426652503
+      - 0.15300003426652503
+      - 0.15399996062994997
+    rows:
+      - - text: |-
+            <p style="text-align: left;">组件</p>
+        - text: |-
+            <p style="text-align: left;">张量形状</p>
+        - text: |-
+            <p style="text-align: left;">FLOPs/token</p>
+        - text: |-
+            <p style="text-align: left;">负载特征 → 昇腾诉求</p>
+      - - text: |-
+            <p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">隐向量下投影 </span>\(W_{c}\)</p>
+          color: "#333333"
+        - text: |-
+            <p style="text-align: left;">\(x∈R^{d}→c_{t}∈R^{d_{c}}\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(2dd_{c}\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• Prefill 稠密 GEMM，计算密集 → 要求 CUBE 算力</p><p style="text-align: left;">• Decode 退化为 GEMV，访存密集 → 要求 HBM 带宽</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">Q/K/V 投影与上投影</p>
+          color: "#262626"
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;">\(q:d→Hd_{h}\)<span style="font-size: 8px;"> </span></p><p style="text-align: left;">\(k,v:d_{c}→Hd_{h}\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(2dHd_{h}+4d_{c}Hd_{h}\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">• Prefill 稠密 GEMM → CUBE</span></p><p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">• Decode 吸收上投影、直接以 </span>\(c_{t}\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;"> 计算 → KV 读取下降</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;"><span style="color: #262626;">全局注意力 </span><span style="color: #C00000;">①</span></p>
+          color: "#333333"
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;">\(q,k,v∈R^{Hd_{h}}\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">；L 任意</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(4LHd_{h}\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">，随 L 线性</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• CUBE matmul + Vector softmax</p><p style="text-align: left;">• NoPE → 省去旋转 kernel 与 sin/cos 表</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">KV Cache</p>
+          color: "#262626"
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;">\(c_{t}\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">：</span>\(d_{c}×2B\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;"> / token / 层</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">—</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 随 L 线性增长 → 1M 上下文主要显存项</p><p style="text-align: left;">• NoPE 后单 token 缓存更小 → 容量诉求下降</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;"><span style="color: #262626;">全秩输出门 </span><span style="color: #C00000;">②</span></p>
+          color: "#333333"
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;">\(W_{g}:d×Hd_{h}\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(2dHd_{h}\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 标准稠密 GEMM → CUBE 友好</p><p style="text-align: left;">• 应与注意力输出融合 → 避免显存往返</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">训练 FP32 输出</p>
+          color: "#262626"
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">输出 tile：</span>\(Hd_{h}\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">，FP32</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">—</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 片上占用 ×2 → buffer 需重排</p><p style="text-align: left;">• 与 KV staging 交叠 → 换深流水高吞吐</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+    style: $table1
+  - elementId: param-note
+    elementType: text
+    bounds: [488, 430, 436, 22]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.35;"><span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">显存：24+1 层 MLA 的 KV Cache 随 L 线性增长，为 1M 上下文下的主要显存项；标准 MLA 缓存为 </span>\((d_{c}+d_{r})×2B\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;"> / token。</span></p><p style="text-align: left; line-height: 1.35;"><span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">注：</span>\(d=7168\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">、</span>\(H=96\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">（报告 Table 1）；</span>\(d_{c}\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;"> / </span>\(d_{r}\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;"> / </span>\(d_{h}\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;"> 以 checkpoint config 为准（K2 参考值 512 / 64 / 128）；FLOPs 为推算。</span></p>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text12
+  - elementId: dev-label
+    elementType: text
+    bounds: [44, 446, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">开发需求与趋势思考</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: dev-bullets
+    elementType: text
+    bounds: [44, 466, 876, 68]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>算子层（推理）</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：MLA 已接入 vllm-ascend mla_v1.py 后端，kimi_k3 适配层强制 use_nope=True 并透传 output gate；需回归验证 qk_rope_head_dim = 0 配置下各后端（含量化路径）的正确性</span></li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>算子层（融合）</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：输出门 </span>\(σ(W_{g}x)⊙o\)<span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"> 应与注意力输出及 </span>\(W_{o}\)<span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"> 融合，避免三次显存往返；训练侧 FP32 输出 tile 需 Ascend C 级 buffer 规划（与 KV staging 交叠）</span></li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>框架层</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：KV Cache 按 </span>\(d_{c}×2B\)<span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"> / token 分页，与 KDA checkpoint 统一池化；PD 分离部署下 NoPE 缓存更小，跨节点传输负载相应下降</span></li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>趋势</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：NoPE 将位置建模完全交给递归层，长上下文外推不再受 RoPE 限制；硬件诉求集中于 KV Cache 容量 / 带宽与吸收矩阵 GEMV 效率</span></li></ul>
+      color: $dk1
+      fontSize: 8
+      fontFamily: 微软雅黑, 微软雅黑
+      lineHeight: 1.35
+      wrap: true
+      align:
+        - left
+        - top

@@ -1,0 +1,876 @@
+pageType: content
+background:
+  type: solid
+  color: $lt1
+notes: |-
+  本页讲 Block AttnRes（报告 §2.2 与 §5.4.2），一种深度维的注意力：每层用可学习伪查询 w 对嵌入和前序 block 表示做注意力，让深层表示可以直接访问浅层。Block 化把显存和通信开销从 O(Ld) 降为 O(Nd)——K3 的 96 层被压成 8 个 block、含嵌入共 9 个表示，约 126KB，降了一个量级。
+  左图是两阶段机制：inter-block pass 对缓存的 block 表示批量读一次，intra-block 由各层经 online-softmax 把块内部分和合入。它的 FLOPs 占比极小，矛盾全部在访存和通信结构上，所以优化聚焦内存效率。
+  对应右表和调度看：Prefill 在序列并行下把 TP all-reduce 拆成 reduce-scatter 加 all-gather，intra-block kernel 插入两次集合通信之间、在序列分片的 hidden 上物化，每 token 表示只在一个 rank 物化，消除 N 倍冗余；Decode 把 inter-block kernel 放到 side stream 与主流计算交叠，intra-block 合并、部分和更新、RMSNorm 全部融合进前序 TP all-reduce，隐藏延迟、零独立 kernel。
+  对昇腾开发的启发很直接：这要求通信算子的 epilogue 融合能力，即 HCCL 与 AICore 协同，是昇腾侧的新增需求；同时 RS/AG 之间插入 kernel 的通信-计算融合手法是通用的，可以复用到 MoE 等其他模块。
+  最后看页面底部的开发需求与趋势。算子层：online-softmax merge、部分和更新、RMSNorm 要融合进 TP all-reduce 的 epilogue，依赖通信算子的 epilogue 融合能力（HCCL 与 AICore 协同），是昇腾侧新增需求。框架层 Prefill：SP 排布下 RS/AG 拆分与 kernel 插入点调度，vllm-ascend 需支持 AttnRes 的序列并行路径与分片物化。框架层 Decode：side stream 生命周期管理（inter-block kernel 与主流的同步点），以及 block 表示缓存（每序列 9 个）的跨层管理与 PP 切分交互。趋势判断：深度维注意力引入"跨层状态"的新访存模式；RS/AG 之间插入 kernel 的通信-计算融合手法是通用的，可以复用到 MoE 等模块。
+elements:
+  - elementId: source-note
+    elementType: text
+    bounds: [370, 14, 554, 14]
+    content:
+      text: |-
+        <p style="text-align: right;">资料来源：Kimi K3 Technical Report §2.2 / §5.4.2（Block AttnRes）</p>
+      wrap: false
+      align:
+        - right
+        - middle
+      style: $text1
+  - elementId: title
+    elementType: text
+    bounds: [44, 18, 880, 30]
+    content:
+      text: |-
+        <p style="text-align: left;">Block AttnRes：两阶段调度与通信融合</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text2
+  - elementId: concl-label-bg
+    elementType: shape
+    bounds: [44, 58, 88, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#C00000"
+  - elementId: concl-label
+    elementType: text
+    bounds: [44, 58, 88, 110]
+    content:
+      text: |-
+        <p style="text-align: center;">分析</p><p style="text-align: center;">结论</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text3
+  - elementId: concl-body-bg
+    elementType: shape
+    bounds: [140, 58, 784, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#F2F2F2"
+  - elementId: concl-bullets
+    elementType: text
+    bounds: [154, 63, 756, 100]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>机制与规模</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：以可学习伪查询对前序 block 表示做深度维注意力 → 显存 / 通信开销由 </span>\(O(Ld)\)<span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"> 降为 </span>\(O(Nd)\)<span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">（96 层 → 9 个 block 表示）</span></li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>两阶段 kernel</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：inter-block 批量读一次缓存表示，intra-block 经 online-softmax 合入 → 开销以访存为主，优化聚焦内存效率</span></li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>Prefill（SP）</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：all-reduce 拆为 reduce-scatter + all-gather，kernel 插入两次通信之间 → 每 token 表示只在一个 rank 物化</span></li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;"><strong>Decode</strong></span><span style="color: #262626; font-family: 微软雅黑, 微软雅黑;">：inter-block 放 side stream 交叠，intra-block 融合进 TP all-reduce → 隐藏延迟、零独立 kernel</span></li></ul>
+      wrap: true
+      align:
+        - left
+        - middle
+      style: $text4
+  - elementId: arch-label
+    elementType: text
+    bounds: [44, 180, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">深度维注意力机制与执行调度</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: fig-attnres-s1
+    elementType: shape
+    bounds: [46.7, 206.7, 405.7, 91.6]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t2
+    elementType: text
+    bounds: [55.4, 215.6, 144.5, 12.8]
+    content:
+      text: |-
+        <p style="text-align: left;">机制：对 block 表示做深度维注意力</p>
+      color: $dk1
+      fontSize: 7.5
+      bold: true
+      fontFamily: 黑体, 黑体
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: fig-attnres-s3
+    elementType: shape
+    bounds: [68.5, 248.1, 39.3, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: $lt1
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t4
+    elementType: text
+    bounds: [68.5, 248.1, 39.3, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">b0</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text17
+  - elementId: fig-attnres-s5
+    elementType: shape
+    bounds: [120.9, 248.1, 39.3, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t6
+    elementType: text
+    bounds: [120.9, 248.1, 39.3, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">b1</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text15
+  - elementId: fig-attnres-s7
+    elementType: shape
+    bounds: [173.2, 248.1, 39.3, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t8
+    elementType: text
+    bounds: [173.2, 248.1, 39.3, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">b2</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text15
+  - elementId: fig-attnres-s9
+    elementType: shape
+    bounds: [256.1, 248.1, 39.3, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t10
+    elementType: text
+    bounds: [256.1, 248.1, 39.3, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">b8</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text15
+  - elementId: fig-attnres-t11
+    elementType: text
+    bounds: [226.3, 255.3, 7.3, 11.9]
+    content:
+      text: |-
+        <p style="text-align: center;">…</p>
+      color: "#404040"
+      fontSize: 7
+      fontFamily: Times New Roman, Times New Roman
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: fig-attnres-s12
+    elementType: shape
+    bounds: [305.4, 253.8, 14.8, 14.8]
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: "#F6D2CE"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t13
+    elementType: text
+    bounds: [305.4, 253.8, 14.8, 14.8]
+    content:
+      text: |-
+        <p style="text-align: center;">w</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text7
+  - elementId: fig-attnres-t14
+    elementType: text
+    bounds: [325.9, 256.1, 70.2, 10.2]
+    content:
+      text: |-
+        <p style="text-align: left;">伪查询（逐层可学习）</p>
+      color: "#404040"
+      fontSize: 6
+      bold: true
+      fontFamily: 黑体, 黑体
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: fig-attnres-s15
+    elementType: shape
+    bounds: [186.3, 281.9, 13.1, 13.1]
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: $lt1
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t16
+    elementType: text
+    bounds: [186.3, 281.9, 13.1, 13.1]
+    content:
+      text: |-
+        <p style="text-align: center;">Σ</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text24
+  - elementId: fig-attnres-l17
+    elementType: line
+    bounds: [87.2, 279.8, 226.7, 2]
+    viewBox:
+      - 226.7
+      - 2
+    points: 1,1 225.7,1
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-l18
+    elementType: line
+    bounds: [87.2, 273.3, 2, 8.5]
+    viewBox:
+      - 2
+      - 8.5
+    points: 1,1 1,7.5
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-l19
+    elementType: line
+    bounds: [139.5, 273.3, 2, 8.5]
+    viewBox:
+      - 2
+      - 8.5
+    points: 1,1 1,7.5
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-l20
+    elementType: line
+    bounds: [274.7, 273.3, 2, 8.5]
+    viewBox:
+      - 2
+      - 8.5
+    points: 1,1 1,7.5
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-l21
+    elementType: line
+    bounds: [311.8, 267.6, 2, 14.2]
+    viewBox:
+      - 2
+      - 14.2
+    points: 1,1 1,13.2
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-l22
+    elementType: line
+    bounds: [191.9, 273.3, 2, 9.2]
+    viewBox:
+      - 2
+      - 9.2
+    points: 1,1 1,8.2
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t23
+    elementType: text
+    bounds: [212.5, 282.9, 79.1, 11]
+    content:
+      text: |-
+        <p style="text-align: left;">\(h_{l}=\sum_{i}α_{i}⋅b_{i}\) </p>
+      color: $dk1
+      fontSize: 6.5
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: fig-attnres-t24
+    elementType: text
+    bounds: [325.9, 271.8, 87.7, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">α = softmax(w·RMSNorm(b))</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text23
+  - elementId: fig-attnres-t25
+    elementType: text
+    bounds: [325.9, 281.6, 66.1, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">online softmax 合并</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text23
+  - elementId: fig-attnres-s26
+    elementType: shape
+    bounds: [46.7, 307, 405.7, 43.6]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t27
+    elementType: text
+    bounds: [55.4, 313, 208, 11.9]
+    content:
+      text: |-
+        <p style="text-align: left;">Prefill：all-reduce 拆为 RS + AG，kernel 插入其间</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text14
+  - elementId: fig-attnres-s28
+    elementType: shape
+    bounds: [68.5, 325.5, 69.8, 18.5]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t29
+    elementType: text
+    bounds: [68.5, 325.5, 69.8, 18.5]
+    content:
+      text: |-
+        <p style="text-align: center;">Reduce-Scatter</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text24
+  - elementId: fig-attnres-l30
+    elementType: line
+    bounds: [139.5, 333.9, 15.1, 2]
+    viewBox:
+      - 15.1
+      - 2
+    points: 1,1 14.1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig-attnres-s31
+    elementType: shape
+    bounds: [155.8, 325.5, 135.2, 18.5]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t32
+    elementType: text
+    bounds: [155.8, 325.5, 135.2, 18.5]
+    content:
+      text: |-
+        <p style="text-align: center;">intra-block kernel（序列分片上物化）</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text22
+  - elementId: fig-attnres-l33
+    elementType: line
+    bounds: [292.2, 333.9, 15.1, 2]
+    viewBox:
+      - 15.1
+      - 2
+    points: 1,1 14.1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig-attnres-s34
+    elementType: shape
+    bounds: [308.5, 325.5, 61.1, 18.5]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t35
+    elementType: text
+    bounds: [308.5, 325.5, 61.1, 18.5]
+    content:
+      text: |-
+        <p style="text-align: center;">All-Gather</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text24
+  - elementId: fig-attnres-s36
+    elementType: shape
+    bounds: [46.7, 359.3, 405.7, 48]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t37
+    elementType: text
+    bounds: [55.4, 361, 168, 11.9]
+    content:
+      text: |-
+        <p style="text-align: left;">Decode：inter-block 放 side stream 交叠</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text14
+  - elementId: fig-attnres-s38
+    elementType: shape
+    bounds: [68.5, 371.3, 69.8, 15.3]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t39
+    elementType: text
+    bounds: [68.5, 371.3, 69.8, 15.3]
+    content:
+      text: |-
+        <p style="text-align: center;">主流计算</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text22
+  - elementId: fig-attnres-s40
+    elementType: shape
+    bounds: [151.4, 371.3, 69.8, 15.3]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t41
+    elementType: text
+    bounds: [151.4, 371.3, 69.8, 15.3]
+    content:
+      text: |-
+        <p style="text-align: center;">主流计算</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text22
+  - elementId: fig-attnres-l42
+    elementType: line
+    bounds: [138.4, 377.9, 12.9, 2]
+    viewBox:
+      - 12.9
+      - 2
+    points: 1,1 11.9,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t43
+    elementType: text
+    bounds: [235, 373, 7.3, 11.9]
+    content:
+      text: |-
+        <p style="text-align: center;">…</p>
+      color: "#404040"
+      fontSize: 7
+      fontFamily: Times New Roman, Times New Roman
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: fig-attnres-s44
+    elementType: shape
+    bounds: [103.4, 394.2, 139.6, 9.8]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F6D2CE"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-attnres-t45
+    elementType: text
+    bounds: [103.4, 394.2, 139.6, 9.8]
+    content:
+      text: |-
+        <p style="text-align: center;">inter-block kernel（side stream）</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text20
+  - elementId: fig-attnres-l46
+    elementType: line
+    bounds: [135.1, 385.6, 2, 9.6]
+    viewBox:
+      - 2
+      - 9.6
+    points: 1,8.6 1,1
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#9A9A9C"
+  - elementId: fig-attnres-l47
+    elementType: line
+    bounds: [200.6, 385.6, 2, 9.6]
+    viewBox:
+      - 2
+      - 9.6
+    points: 1,8.6 1,1
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#9A9A9C"
+  - elementId: fig-attnres-t48
+    elementType: text
+    bounds: [256.1, 394.5, 89.2, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">与主流独立计算交叠，隐藏延迟</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text23
+  - elementId: param-label
+    elementType: text
+    bounds: [488, 180, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">各阶段负载与昇腾诉求</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: param-table
+    elementType: table
+    bounds: [488, 208, 436, 216]
+    columnWidths:
+      - 0.2
+      - 0.25
+      - 0.16
+      - 0.39
+    rowHeights:
+      - 0.07999997083698934
+      - 0.18400000583260212
+      - 0.18400000583260212
+      - 0.18400000583260212
+      - 0.18400000583260212
+      - 0.18400000583260212
+    rows:
+      - - text: |-
+            <p style="text-align: left;">阶段</p>
+        - text: |-
+            <p style="text-align: left;">张量形状</p>
+        - text: |-
+            <p style="text-align: left;">FLOPs</p>
+        - text: |-
+            <p style="text-align: left;">负载特征 → 昇腾诉求</p>
+      - - text: |-
+            <p style="text-align: left;">Inter-block pass</p>
+        - text: |-
+            <p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">读 N 个 block 表示 </span>\([N,d]\)</p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(O(Nd)\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;"> / 层</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 访存为主 → 批量读一次</p><p style="text-align: left;">• Decode 放 side stream 交叠 → 隐藏延迟</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">Intra-block 合并</p>
+        - text: |-
+            <p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">online softmax merge，</span>\([d]\)</p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(O(d)\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;"> / 层</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 逐元素 → Vector</p><p style="text-align: left;">• 融合进 TP all-reduce epilogue → 零独立 kernel</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">伪查询与权重</p>
+        - text: |-
+            <p style="text-align: left;">\(w∈R^{d}\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">；</span>\(α=softmax(w⋅RMSNorm(b))\)</p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(O(Nd)\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 小 GEMV → Vector</p><p style="text-align: left;">• N = 9 → 计算量极小</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">Block 表示缓存</p>
+        - text: |-
+            <p style="text-align: left;">\(N×d×2B\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;"> / 序列</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">—</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 96 层 → 9 个表示 ≈126KB（BF16）</p><p style="text-align: left;">• 显存降一个量级</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">Prefill 通信</p>
+        - text: |-
+            <p style="text-align: left;">RS + AG（序列分片）</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">—</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 通信量 ≈ all-reduce</p><p style="text-align: left;">• 消除冗余物化与 I/O</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+    style: $table2
+  - elementId: param-note
+    elementType: text
+    bounds: [488, 430, 436, 22]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.35;"><span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">按 </span>\(d=7168\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">、</span>\(N=9\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">：block 表示 </span>\(≈9×7168×2B≈126KB\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;"> / 序列；朴素 TP8 每 rank 物化则冗余 8 倍。</span></p><p style="text-align: left; line-height: 1.35;"><span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">注：FLOPs 占比极小，访存与通信结构是主要矛盾；N = 8 blocks + 嵌入（报告 §2.2）。</span></p>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text12
+  - elementId: dev-label
+    elementType: text
+    bounds: [44, 446, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">开发需求与趋势思考</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: dev-bullets
+    elementType: text
+    bounds: [44, 466, 876, 68]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><strong>算子层</strong>：online-softmax merge + 部分和更新 + RMSNorm 融合进 TP all-reduce epilogue —— 依赖通信算子的 epilogue 融合能力（HCCL + AICore 协同），为昇腾侧新增需求</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>框架层（prefill）</strong>：SP 排布下 RS / AG 拆分与 kernel 插入点调度；vllm-ascend 需支持 AttnRes 的序列并行路径与分片物化</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>框架层（decode）</strong>：side stream 生命周期管理（inter-block kernel 与主流同步点）；block 表示缓存（9 个 / 序列）的跨层管理与 PP 切分交互</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>趋势</strong>：深度维注意力引入“跨层状态”新访存模式；RS / AG 之间插入 kernel 的通信-计算融合手法通用，可复用于 MoE 等模块</li></ul>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text13

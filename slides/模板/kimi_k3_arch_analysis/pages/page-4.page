@@ -1,0 +1,774 @@
+pageType: content
+background:
+  type: solid
+  color: $lt1
+notes: |-
+  本页讲推理 Decode 侧的融合递归算子（报告 §5.4.2）。核心矛盾是状态回滚：decode 每步原地更新状态 S，MTP 投机解码一旦拒绝部分草稿，S 已经越过最后接受的 token、无法直接回滚；若给每个草稿位置保存状态快照，大 batch 下状态流量不可承受。
+  方案看左图下半部分：只缓存草稿 token 的投影输入，体积仅为状态快照的约 1/32，验证后在片上重建已接受 token 的状态，写回 verified + bonus token 的状态——与同期工作 ReplaySSM 独立同思路。上半部分是单融合 kernel：短卷积、输入归一化、门控、KDA 递归、输出归一化合成一个递归循环，重放 token、bonus token 和下一草稿窗口共享这个循环，验证延迟随验证 token 数亚线性增长。
+  对应右表看诉求：短卷积和门控是小 Vector 计算，独立 kernel 不划算、必须融合——现状是 vllm-ascend 的 safe-gate 还在 host 侧做 apply_kda_gate 预处理，多一次显存往返且阻断全链路融合，需要下沉进 kernel；KDA 递归是 rank-1 小矩阵更新，并行度只有 B×H 维，状态驻留片上是关键，片上 SRAM 容量直接决定可融合的草稿窗口长度；状态重放用片上计算换访存，大 batch 下收益显著。
+  对开发的启发：投机解码乘线性注意力让"状态可重建性"成为算子设计约束；框架侧要管理草稿投影缓存的生命周期（只存在于 decode 阶段），并与 vllm-ascend spec_decode 的各 proposer 对接。
+  最后看页面底部的开发需求与趋势。算子层：需要 Ascend C 融合递归 kernel，把短卷积、归一化、门控、递归、输出归一化合成单 kernel 并包含 replay 路径；vllm-ascend 现有 Triton fused_recurrent_kda，MTP 回滚尚未实现。门控融合：safe-gate 计算要下沉进 kernel——现状 gate.py 在 host 侧做 apply_kda_gate 预处理，多一次显存往返且阻断全链路融合。框架层：草稿投影输入缓存的生命周期管理（仅存在于 decode 阶段），与 vllm-ascend spec_decode 的 mtp、dflash、dspark 各 proposer 对接。趋势判断：投机解码乘线性注意力使"状态可重建性"成为算子设计约束；片上 SRAM 容量决定可融合的草稿窗口长度。
+elements:
+  - elementId: source-note
+    elementType: text
+    bounds: [370, 14, 554, 14]
+    content:
+      text: |-
+        <p style="text-align: right;">资料来源：Kimi K3 Technical Report §5.4.2（KDA）；ReplaySSM [25]；vllm-ascend ops/triton/kda</p>
+      wrap: false
+      align:
+        - right
+        - middle
+      style: $text1
+  - elementId: title
+    elementType: text
+    bounds: [44, 18, 880, 30]
+    content:
+      text: |-
+        <p style="text-align: left;">KDA Decoding：可回滚的投机解码融合递归算子</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text2
+  - elementId: concl-label-bg
+    elementType: shape
+    bounds: [44, 58, 88, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#C00000"
+  - elementId: concl-label
+    elementType: text
+    bounds: [44, 58, 88, 110]
+    content:
+      text: |-
+        <p style="text-align: center;">分析</p><p style="text-align: center;">结论</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text3
+  - elementId: concl-body-bg
+    elementType: shape
+    bounds: [140, 58, 784, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#F2F2F2"
+  - elementId: concl-bullets
+    elementType: text
+    bounds: [154, 63, 756, 100]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><strong>瓶颈转移</strong>：decode 每步原地更新状态 S，投机解码拒绝草稿时状态无法直接回滚 → 逐草稿快照在大 batch 下不可承受</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>方案</strong>：只缓存草稿的投影输入，验证后在片上重建已接受状态 → 状态流量降一个量级（与 ReplaySSM 独立同思路）</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>单融合 kernel</strong>：重放 + bonus + 下一草稿窗口共享一个递归循环 → 验证延迟亚线性增长，优于状态缓存基线</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>部署亲和</strong>：投影缓存不离开 decode 阶段 → prefix caching 与 PD 分离行为与非投机服务一致</li></ul>
+      color: "#262626"
+      fontSize: 9
+      fontFamily: 微软雅黑, 微软雅黑
+      lineHeight: 1.35
+      wrap: true
+      align:
+        - left
+        - middle
+  - elementId: arch-label
+    elementType: text
+    bounds: [44, 180, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">融合算子构成与状态回滚</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: fig-kda_decode-s1
+    elementType: shape
+    bounds: [46.7, 206.7, 405.7, 91.6]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t2
+    elementType: text
+    bounds: [55.4, 218.2, 221.7, 11.9]
+    content:
+      text: |-
+        <p style="text-align: left;">单融合 kernel：重放 + bonus + 下一草稿共享一个递归循环</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text14
+  - elementId: fig-kda_decode-s3
+    elementType: shape
+    bounds: [68.5, 250.3, 65.4, 30.5]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t4
+    elementType: text
+    bounds: [68.5, 250.3, 65.4, 30.5]
+    content:
+      text: |-
+        <p style="text-align: center;">短卷积 k=4</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig-kda_decode-s5
+    elementType: shape
+    bounds: [142.7, 250.3, 65.4, 30.5]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t6
+    elementType: text
+    bounds: [142.7, 250.3, 65.4, 30.5]
+    content:
+      text: |-
+        <p style="text-align: center;">输入归一化</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig-kda_decode-s7
+    elementType: shape
+    bounds: [216.8, 250.3, 65.4, 30.5]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t8
+    elementType: text
+    bounds: [216.8, 250.3, 65.4, 30.5]
+    content:
+      text: |-
+        <p style="text-align: center;">门控 σ</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig-kda_decode-s9
+    elementType: shape
+    bounds: [291, 250.3, 65.4, 30.5]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t10
+    elementType: text
+    bounds: [291, 250.3, 65.4, 30.5]
+    content:
+      text: |-
+        <p style="text-align: center;">KDA 递归 S</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text22
+  - elementId: fig-kda_decode-s11
+    elementType: shape
+    bounds: [365.2, 250.3, 65.4, 30.5]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t12
+    elementType: text
+    bounds: [365.2, 250.3, 65.4, 30.5]
+    content:
+      text: |-
+        <p style="text-align: center;">输出归一化</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig-kda_decode-l13
+    elementType: line
+    bounds: [134.1, 264.6, 8.5, 2]
+    viewBox:
+      - 8.5
+      - 2
+    points: 1,1 7.5,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-l14
+    elementType: line
+    bounds: [208.2, 264.6, 8.5, 2]
+    viewBox:
+      - 8.5
+      - 2
+    points: 1,1 7.5,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-l15
+    elementType: line
+    bounds: [282.4, 264.6, 8.5, 2]
+    viewBox:
+      - 8.5
+      - 2
+    points: 1,1 7.5,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-l16
+    elementType: line
+    bounds: [356.5, 264.6, 8.5, 2]
+    viewBox:
+      - 8.5
+      - 2
+    points: 1,1 7.5,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-l17
+    elementType: line
+    bounds: [303.1, 279.8, 32.5, 8.5]
+    viewBox:
+      - 32.5
+      - 8.5
+    points: 31.5,1 31.5,7.5 1,7.5
+    curve: sharp
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-l18
+    elementType: line
+    bounds: [303.1, 280.9, 2, 7.4]
+    viewBox:
+      - 2
+      - 7.4
+    points: 1,6.4 1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t19
+    elementType: text
+    bounds: [305.5, 291, 27.6, 9.3]
+    content:
+      text: |-
+        <p style="text-align: center;">递归循环</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text23
+  - elementId: fig-kda_decode-s20
+    elementType: shape
+    bounds: [46.7, 307, 405.7, 100.3]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t21
+    elementType: text
+    bounds: [55.4, 317.4, 98.6, 11.9]
+    content:
+      text: |-
+        <p style="text-align: left;">MTP 验证拒绝时的状态回滚</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text14
+  - elementId: fig-kda_decode-s22
+    elementType: shape
+    bounds: [68.5, 341.9, 39.3, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t23
+    elementType: text
+    bounds: [68.5, 341.9, 39.3, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">d1 √</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig-kda_decode-s24
+    elementType: shape
+    bounds: [116.5, 341.9, 39.3, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t25
+    elementType: text
+    bounds: [116.5, 341.9, 39.3, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">d2 √</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig-kda_decode-s26
+    elementType: shape
+    bounds: [164.5, 341.9, 39.3, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#E5B3B2"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t27
+    elementType: text
+    bounds: [164.5, 341.9, 39.3, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">d3 ×</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig-kda_decode-s28
+    elementType: shape
+    bounds: [212.5, 341.9, 39.3, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#E5B3B2"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t29
+    elementType: text
+    bounds: [212.5, 341.9, 39.3, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">d4 ×</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig-kda_decode-l30
+    elementType: line
+    bounds: [107.9, 354, 8.5, 2]
+    viewBox:
+      - 8.5
+      - 2
+    points: 1,1 7.5,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-l31
+    elementType: line
+    bounds: [155.9, 354, 8.5, 2]
+    viewBox:
+      - 8.5
+      - 2
+    points: 1,1 7.5,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-l32
+    elementType: line
+    bounds: [203.9, 354, 8.5, 2]
+    viewBox:
+      - 8.5
+      - 2
+    points: 1,1 7.5,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-l33
+    elementType: line
+    bounds: [251.8, 354, 19.4, 2]
+    viewBox:
+      - 19.4
+      - 2
+    points: 1,1 18.4,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-s34
+    elementType: shape
+    bounds: [271.4, 341.9, 82.9, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t35
+    elementType: text
+    bounds: [271.4, 341.9, 82.9, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">片上重建 S（仅 d1, d2）</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig-kda_decode-l36
+    elementType: line
+    bounds: [354.3, 354, 15.1, 2]
+    viewBox:
+      - 15.1
+      - 2
+    points: 1,1 14.1,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-s37
+    elementType: shape
+    bounds: [369.5, 341.9, 74.2, 26.2]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig-kda_decode-t38
+    elementType: text
+    bounds: [369.5, 341.9, 74.2, 26.2]
+    content:
+      text: |-
+        <p style="text-align: center;">写回 S (verified + bonus)</p>
+      color: "#1F2A36"
+      fontSize: 5.5
+      fontFamily: 黑体, 黑体
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: fig-kda_decode-t39
+    elementType: text
+    bounds: [68.5, 383, 276.2, 9.3]
+    content:
+      text: |-
+        <p style="text-align: left;">缓存投影输入 D×(4dk+1)·H×2B，仅为状态快照的 ≈1/32（dv = 128）；状态不离开 decode 阶段</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text23
+  - elementId: param-label
+    elementType: text
+    bounds: [488, 180, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">各阶段负载与昇腾诉求</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: param-table
+    elementType: table
+    bounds: [488, 208, 436, 216]
+    columnWidths:
+      - 0.2
+      - 0.25
+      - 0.16
+      - 0.39
+    rowHeights:
+      - 0.07999997083698934
+      - 0.18400000583260212
+      - 0.18400000583260212
+      - 0.18400000583260212
+      - 0.18400000583260212
+      - 0.18400000583260212
+    rows:
+      - - text: |-
+            <p style="text-align: left;">阶段</p>
+        - text: |-
+            <p style="text-align: left;">张量形状</p>
+        - text: |-
+            <p style="text-align: left;">FLOPs</p>
+        - text: |-
+            <p style="text-align: left;">负载特征 → 昇腾诉求</p>
+      - - text: |-
+            <p style="text-align: left;">短卷积（causal，k=4）</p>
+        - text: |-
+            <p style="text-align: left;">\([B,H,d_{k}]×4\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(≈4d_{k}H\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;"> / token</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 小卷积 → Vector</p><p style="text-align: left;">• 独立 kernel 不划算 → 必须融合</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">门控（safe-gate）</p>
+        - text: |-
+            <p style="text-align: left;">\(g=-5σ(e^{A}z)\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(O(Hd_{k})\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 纯 Vector</p><p style="text-align: left;">• 现状 host 侧预处理 → 多一次显存往返，待下沉</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">KDA 递归（rank-1 更新）</p>
+        - text: |-
+            <p style="text-align: left;">\(S:[H,d_{k},d_{v}]\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">，逐 token 串行</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(≈3Hd_{k}d_{v}\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;"> / token</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 小矩阵、并行度仅 B×H 维</p><p style="text-align: left;">• 状态驻留片上 → SRAM 容量诉求</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">状态重建（replay）</p>
+        - text: |-
+            <p style="text-align: left;">D 个草稿的投影输入</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">\(D×3Hd_{k}d_{v}\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• 片上重建 → 免 D 份状态快照 HBM 读写</p><p style="text-align: left;">• 计算换访存 → 大 batch 收益显著</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">投影输入缓存</p>
+        - text: |-
+            <p style="text-align: left;">\(D×(4d_{k}+1)H×2B\)<span style="font-size: 8px;"> </span></p>
+          color: "#333333"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">—</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">• 仅为状态快照的 </span>\(≈4/d_{v}\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">（</span>\(d_{v}=128→1/32\)<span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">）</span></p><p style="text-align: left;"><span style="color: #262626; font-size: 8px; font-family: 微软雅黑, 微软雅黑;">• 显存与带宽双省</span></p>
+          color: "#333333"
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+    style: $table2
+  - elementId: param-note
+    elementType: text
+    bounds: [488, 430, 436, 22]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.35;"><span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">估算（</span>\(d_{k}=d_{v}=128\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">、</span>\(H=96\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;">）：单层状态 3.0MB（BF16）；D = 4 时快照读写 ≈12MB / 层 / step，投影缓存 ≈0.4MB / 层；</span>\(d_{k}\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;"> / </span>\(d_{v}\)<span style="color: #737373; font-family: 微软雅黑, 微软雅黑;"> 以 checkpoint config 为准。</span></p>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text12
+  - elementId: dev-label
+    elementType: text
+    bounds: [44, 446, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">开发需求与趋势思考</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: dev-bullets
+    elementType: text
+    bounds: [44, 466, 876, 68]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><strong>算子层</strong>：需 Ascend C 融合递归 kernel（短卷积 + 归一化 + 门控 + 递归 + 输出归一化单 kernel，含 replay 路径）；vllm-ascend 现有 Triton fused_recurrent_kda，MTP 回滚未实现</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>门控融合</strong>：safe-gate 计算下沉进 kernel —— 现状 gate.py 在 host 侧 apply_kda_gate 预处理，多一次显存往返且阻断全链路融合</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>框架层</strong>：草稿投影输入缓存的生命周期管理（仅存在于 decode 阶段），与 vllm-ascend spec_decode 各 proposer（mtp / dflash / dspark）对接</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>趋势</strong>：投机解码 × 线性注意力使“状态可重建性”成为算子设计约束；片上 SRAM 容量决定可融合的草稿窗口长度</li></ul>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text13

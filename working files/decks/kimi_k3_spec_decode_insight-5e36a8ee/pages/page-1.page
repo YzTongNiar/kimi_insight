@@ -1,0 +1,873 @@
+pageType: content
+background:
+  type: solid
+  color: $lt1
+elements:
+  - elementId: source-note
+    elementType: text
+    bounds: [370, 14, 554, 14]
+    content:
+      text: |-
+        <p style="text-align: right;">资料来源：vllm-ascend PR #17664 / #10023 / #14596；REPORT_综合分析报告 §3；Kimi K3 Technical Report §5.4.2</p>
+      wrap: false
+      align:
+        - right
+        - middle
+      style: $text1
+  - elementId: title
+    elementType: text
+    bounds: [44, 18, 880, 30]
+    content:
+      text: |-
+        <p style="text-align: left;">Kimi K3 投机推理：性能现状、高性能算子与演进方向</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text2
+  - elementId: concl-label-bg
+    elementType: shape
+    bounds: [44, 58, 88, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#C00000"
+  - elementId: concl-label
+    elementType: text
+    bounds: [44, 58, 88, 110]
+    content:
+      text: |-
+        <p style="text-align: center;">分析</p><p style="text-align: center;">结论</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text3
+  - elementId: concl-body-bg
+    elementType: shape
+    bounds: [140, 58, 784, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#F2F2F2"
+  - elementId: concl-bullets
+    elementType: text
+    bounds: [154, 63, 756, 100]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><strong>链路已通</strong>：PR #17664（2026-10-04 合并）将 K3 MTP 投机验证接入 fla_npu recurrent_kda，num_accepted_tokens + spec_state_indices + state pool 构成完整 KDA 状态回滚链路</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>算子收益</strong>：A5 recurrent KDA 平均延迟 121.8→94.6 μs（-22.31%）；draft 前向切 FlashMla 后 2.76→0.878 ms/步 —— 但均为局部收益，不等于端到端吞吐</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>实现定位</strong>：当前为显式 state-slot 快照恢复，尚未实现报告级 projected-input replay；状态/投影输入体积比 ≈51.2×，流量降幅上限 ≈99%</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>演进主线</strong>：动态投机 K（batch 级→请求级）+ 独立 draft KV 滑窗（Eagle3 +40.8% 接受长度）+ replay 降状态流量，三线分验</li></ul>
+      color: "#262626"
+      fontSize: 9
+      fontFamily: 微软雅黑, 微软雅黑
+      lineHeight: 1.35
+      wrap: true
+      align:
+        - left
+        - middle
+  - elementId: arch-label
+    elementType: text
+    bounds: [44, 180, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">投机验证调用链路与状态回滚</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: fig1-box
+    elementType: shape
+    bounds: [46.7, 206.7, 405.7, 95]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig1-caption
+    elementType: text
+    bounds: [55.4, 214, 260, 12]
+    content:
+      text: |-
+        <p style="text-align: left;">MTP 投机验证与 KDA 状态回滚链路</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text14
+  - elementId: fig1-b1
+    elementType: shape
+    bounds: [60, 236, 68, 28]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig1-t1
+    elementType: text
+    bounds: [60, 236, 68, 28]
+    content:
+      text: |-
+        <p style="text-align: center;">MTP 草稿 token</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig1-b2
+    elementType: shape
+    bounds: [138, 236, 68, 28]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig1-t2
+    elementType: text
+    bounds: [138, 236, 68, 28]
+    content:
+      text: |-
+        <p style="text-align: center;">投影 q|k|v g β</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig1-b3
+    elementType: shape
+    bounds: [216, 236, 68, 28]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig1-t3
+    elementType: text
+    bounds: [216, 236, 68, 28]
+    content:
+      text: |-
+        <p style="text-align: center;">spec causal-conv</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig1-b4
+    elementType: shape
+    bounds: [294, 236, 68, 28]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig1-t4
+    elementType: text
+    bounds: [294, 236, 68, 28]
+    content:
+      text: |-
+        <p style="text-align: center;">recurrent_kda</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text22
+  - elementId: fig1-b5
+    elementType: shape
+    bounds: [372, 236, 68, 28]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig1-t5
+    elementType: text
+    bounds: [372, 236, 68, 28]
+    content:
+      text: |-
+        <p style="text-align: center;">index_copy 写回</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig1-a1
+    elementType: line
+    bounds: [128, 249, 10, 2]
+    viewBox: [10, 2]
+    points: 1,1 9,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig1-a2
+    elementType: line
+    bounds: [206, 249, 10, 2]
+    viewBox: [10, 2]
+    points: 1,1 9,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig1-a3
+    elementType: line
+    bounds: [284, 249, 10, 2]
+    viewBox: [10, 2]
+    points: 1,1 9,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig1-a4
+    elementType: line
+    bounds: [362, 249, 10, 2]
+    viewBox: [10, 2]
+    points: 1,1 9,1
+    curve: sharp
+    arrow: [null, arrow]
+    border:
+      style: solid
+      width: 0.8
+      color: "#1B1B1E"
+  - elementId: fig1-subnote
+    elementType: text
+    bounds: [60, 272, 380, 20]
+    content:
+      text: |-
+        <p style="text-align: left;">num_accepted_tokens 定位起始 state slot；conv 与 KDA 共用同一 accepted prefix；输出经 index_copy 放回原 token 位置，投机/普通 decode 同批分流</p>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text23
+  - elementId: fig2-box
+    elementType: shape
+    bounds: [46.7, 312, 405.7, 95]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig2-caption
+    elementType: text
+    bounds: [55.4, 319, 300, 12]
+    content:
+      text: |-
+        <p style="text-align: left;">state pool：accepted 前缀恢复 + 拒绝隔离</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text14
+  - elementId: fig2-s0
+    elementType: shape
+    bounds: [60, 340, 56, 26]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig2-st0
+    elementType: text
+    bounds: [60, 340, 56, 26]
+    content:
+      text: |-
+        <p style="text-align: center;">S_accepted</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig2-s1
+    elementType: shape
+    bounds: [124, 340, 56, 26]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig2-st1
+    elementType: text
+    bounds: [124, 340, 56, 26]
+    content:
+      text: |-
+        <p style="text-align: center;">S(d1) ✓</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig2-s2
+    elementType: shape
+    bounds: [188, 340, 56, 26]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig2-st2
+    elementType: text
+    bounds: [188, 340, 56, 26]
+    content:
+      text: |-
+        <p style="text-align: center;">S(d2) ✓</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig2-s3
+    elementType: shape
+    bounds: [252, 340, 56, 26]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#E5B3B2"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig2-st3
+    elementType: text
+    bounds: [252, 340, 56, 26]
+    content:
+      text: |-
+        <p style="text-align: center;">S(d3) ✗</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig2-s4
+    elementType: shape
+    bounds: [316, 340, 56, 26]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#E5B3B2"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig2-st4
+    elementType: text
+    bounds: [316, 340, 56, 26]
+    content:
+      text: |-
+        <p style="text-align: center;">S(d4) ✗</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig2-s5
+    elementType: shape
+    bounds: [380, 340, 56, 26]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: fig2-st5
+    elementType: text
+    bounds: [380, 340, 56, 26]
+    content:
+      text: |-
+        <p style="text-align: center;">拒绝 slot 回收</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text21
+  - elementId: fig2-subnote
+    elementType: text
+    bounds: [60, 374, 380, 24]
+    content:
+      text: |-
+        <p style="text-align: left;">每个 speculative token 一个独立 state slot，拒绝状态不覆盖主状态；回滚范围限于短投机窗口（单段 recurrent ≤8 token），无需回滚长上下文</p>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text23
+  - elementId: param-label
+    elementType: text
+    bounds: [488, 180, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">高性能算子与性能数据</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: param-table
+    elementType: table
+    bounds: [488, 200, 436, 100]
+    columnWidths:
+      - 0.21
+      - 0.25
+      - 0.28
+      - 0.26
+    rowHeights:
+      - 0.18
+      - 0.41
+      - 0.41
+    rows:
+      - - text: |-
+            <p style="text-align: left;">算子 / 阶段</p>
+        - text: |-
+            <p style="text-align: left;">关键约束</p>
+        - text: |-
+            <p style="text-align: left;">实测数据</p>
+        - text: |-
+            <p style="text-align: left;">负载特征 → 昇腾诉求</p>
+      - - text: |-
+            <p style="text-align: left;">flash_mla（draft 前向）</p>
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">分段双核：big_quant 长历史 + small_bf16 近端</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">draft attention 2.76→0.878 ms/步（175.5 μs/层，ep32；ep64 339.5 μs/层）</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• KV 在线量化 + LSE 合并</p><p style="text-align: left;">• 长史量化读取 → KV 带宽减半</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;">recurrent_kda（MTP 回滚）</p>
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">短窗 ≤8 token；inplace 写回 state pool</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">A5：121.8→94.6 μs（-22.31%）；A3：+2.97%</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">• rank-1 小矩阵，并行度仅 B×H</p><p style="text-align: left;">• 状态驻留片上 → SRAM 诉求</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+    style: $table2
+  - elementId: param-note
+    elementType: text
+    bounds: [488, 304, 436, 14]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.35;"><span style="color: #737373;">draft 基线为 FIA 单核全 bf16；recurrent_kda 为 PR #17664 算子级 profile，均不等于端到端吞吐。</span></p>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text12
+  - elementId: evo-label
+    elementType: text
+    bounds: [488, 324, 400, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">演进方向：KV 滑窗与动态投机 K（两个独立技术点）</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: evo-box
+    elementType: shape
+    bounds: [488, 344, 436, 52]
+    shapeName: roundRect
+    border:
+      style: dash
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: evo-cap1
+    elementType: text
+    bounds: [498, 349, 150, 10]
+    content:
+      text: |-
+        <p style="text-align: left;">① Draft KV 滑窗</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text14
+  - elementId: evo-bar-draft
+    elementType: shape
+    bounds: [498, 364, 132, 8]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: evo-bar-draft-win
+    elementType: shape
+    bounds: [604, 364, 26, 8]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: evo-bar-target
+    elementType: shape
+    bounds: [498, 376, 132, 8]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#CBE6CF"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: evo-t-draft
+    elementType: text
+    bounds: [636, 362, 68, 10]
+    content:
+      text: |-
+        <p style="text-align: left;">draft 仅最近 W</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text23
+  - elementId: evo-t-target
+    elementType: text
+    bounds: [636, 374, 68, 10]
+    content:
+      text: |-
+        <p style="text-align: left;">target 全上下文</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text23
+  - elementId: evo-divider
+    elementType: line
+    bounds: [709, 348, 2, 44]
+    viewBox: [2, 44]
+    points: 1,1 1,43
+    curve: sharp
+    border:
+      style: dash
+      width: 0.75
+      color: "#737373"
+  - elementId: evo-cap2
+    elementType: text
+    bounds: [719, 349, 150, 10]
+    content:
+      text: |-
+        <p style="text-align: left;">② 动态投机 K</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text14
+  - elementId: evo-k1
+    elementType: shape
+    bounds: [719, 364, 37, 12]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#C8DCF4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: evo-kt1
+    elementType: text
+    bounds: [719, 364, 37, 12]
+    content:
+      text: |-
+        <p style="text-align: center;">K=5</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text23
+  - elementId: evo-k2
+    elementType: shape
+    bounds: [759, 364, 37, 12]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#D9E6F7"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: evo-kt2
+    elementType: text
+    bounds: [759, 364, 37, 12]
+    content:
+      text: |-
+        <p style="text-align: center;">K=4</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text23
+  - elementId: evo-k3
+    elementType: shape
+    bounds: [799, 364, 37, 12]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#E7EFFA"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: evo-kt3
+    elementType: text
+    bounds: [799, 364, 37, 12]
+    content:
+      text: |-
+        <p style="text-align: center;">K=3</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text23
+  - elementId: evo-k4
+    elementType: shape
+    bounds: [839, 364, 37, 12]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#F0F0F4"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: evo-kt4
+    elementType: text
+    bounds: [839, 364, 37, 12]
+    content:
+      text: |-
+        <p style="text-align: center;">K=1</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text23
+  - elementId: evo-k5
+    elementType: shape
+    bounds: [879, 364, 37, 12]
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: "#E5B3B2"
+    border:
+      style: solid
+      width: 0.5
+      color: "#1B1B1E"
+  - elementId: evo-kt5
+    elementType: text
+    bounds: [879, 364, 37, 12]
+    content:
+      text: |-
+        <p style="text-align: center;">K=0</p>
+      wrap: false
+      align:
+        - center
+        - middle
+      style: $text23
+  - elementId: evo-k-note
+    elementType: text
+    bounds: [719, 380, 200, 10]
+    content:
+      text: |-
+        <p style="text-align: left;">bs 1–16 → 129+：并发越高 K 越小直至关闭</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text23
+  - elementId: evo-table
+    elementType: table
+    bounds: [488, 402, 436, 36]
+    columnWidths:
+      - 0.16
+      - 0.84
+    rowHeights:
+      - 0.5
+      - 0.5
+    rows:
+      - - text: |-
+            <p style="text-align: left;"><strong>KV 滑窗</strong></p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">draft 只读最近 W，target 全上下文 —— 恢复长上下文接受率（Eagle3 +40.8%）</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left;"><strong>动态投机 K</strong></p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left;">按并发阶梯调整 draft 长度，高并发 K→0 —— 削减无效验证成本（K≤8）</p>
+          color: "#262626"
+          fontSize: 8
+          fontFamily: 微软雅黑, 微软雅黑
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+    style:
+      cellStyle:
+        align:
+          - left
+          - middle
+  - elementId: dev-label
+    elementType: text
+    bounds: [44, 446, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">专家观点：现状研判与演进方向</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: dev-bullets
+    elementType: text
+    bounds: [44, 466, 876, 68]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><strong>现状</strong>：回滚链路功能闭环、flash_mla 与 recurrent_kda 收益已兑现，但仍是 state-slot 快照方案（状态/投影输入 ≈51.2×）—— 结论：局部收益不等于端到端，瓶颈在状态流量而非计算</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>演进</strong>：KV 滑窗与动态 K 分别解决接受率与验证成本两个正交问题 —— 观点：MTP 复用 target 层不能缩窗，滑窗须依托独立 draft；KDA 下最优 K 或低于 Transformer draft</li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><strong>总结</strong>：投机推理的演进主线是从“固定窗口 + 状态快照”走向“自适应 K/W 调度 + 低流量 replay”—— 调度智能化与状态流量压缩决定 K3 投机的端到端上限</li></ul>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text13

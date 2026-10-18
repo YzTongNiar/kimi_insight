@@ -1,0 +1,83 @@
+version: v2
+title: Kimi K3 推理部署方案技术洞察
+size: [960, 540]
+theme:
+  colors:
+    dk1: "#000000"
+    lt1: "#FFFFFF"
+    red: "#C00000"
+    gray-note: "#737373"
+    c-comm: "#C00000"
+    c-comp: "#15803D"
+    c-mem: "#D97706"
+  textStyles:
+    text1:
+      color: "#737373"
+      fontSize: 8
+      fontFamily: 微软雅黑
+    text2:
+      color: "#C00000"
+      fontSize: 18
+      fontFamily: 微软雅黑
+      bold: true
+    text3:
+      color: $lt1
+      fontSize: 14
+      fontFamily: 微软雅黑
+      bold: true
+    text4:
+      color: $dk1
+      fontSize: 9
+      fontFamily: 微软雅黑
+      lineHeight: 1.35
+    text5:
+      color: "#C00000"
+      fontSize: 12
+      fontFamily: 微软雅黑
+      bold: true
+    text12:
+      color: $dk1
+      fontSize: 7.5
+      fontFamily: 微软雅黑
+      lineHeight: 1.35
+    text13:
+      color: "#262626"
+      fontSize: 8
+      fontFamily: 微软雅黑
+      lineHeight: 1.35
+  tableStyles:
+    tbl:
+      cellStyle:
+        align:
+          - left
+          - middle
+        color: "#262626"
+        fontSize: 8
+        fontFamily: 微软雅黑
+        lineHeight: 1.25
+        border:
+          - null
+          - null
+          - style: solid
+            width: 0.75
+            color: "#D4D4D4"
+          - null
+      firstRowStyle:
+        color: "#262626"
+        fontSize: 8
+        fontFamily: 微软雅黑
+        bold: true
+        fill:
+          type: solid
+          color: "#F5F5F5"
+        border:
+          - null
+          - null
+          - style: solid
+            width: 1
+            color: "#737373"
+          - null
+      rowOverColumn: true
+pages:
+  - pages/page-1.page
+  - pages/page-2.page

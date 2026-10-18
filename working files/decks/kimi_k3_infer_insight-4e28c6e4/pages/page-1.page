@@ -1,0 +1,221 @@
+pageType: content
+background:
+  type: solid
+  color: $lt1
+elements:
+  - elementId: source-note
+    elementType: text
+    bounds: [400, 14, 524, 14]
+    content:
+      text: |-
+        <p style="text-align: right;">资料来源：REPORT_综合分析报告（2026-10-14/15）§2 / §5 / §6；P 通信为去重 a2a 双计后口径</p>
+      wrap: false
+      align:
+        - right
+        - middle
+      style: $text1
+  - elementId: title
+    elementType: text
+    bounds: [44, 18, 880, 30]
+    content:
+      text: |-
+        <p style="text-align: left;">总体负载形态：D 访存主导、P 通信主导，通信是全链路第一优化优先级</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text2
+  - elementId: concl-label-bg
+    elementType: shape
+    bounds: [44, 58, 88, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#C00000"
+  - elementId: concl-label
+    elementType: text
+    bounds: [44, 58, 88, 110]
+    content:
+      text: |-
+        <p style="text-align: center;">分析</p><p style="text-align: center;">结论</p>
+      wrap: true
+      align:
+        - center
+        - middle
+      style: $text3
+  - elementId: concl-body-bg
+    elementType: shape
+    bounds: [140, 58, 784, 110]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#F2F2F2"
+  - elementId: concl-bullets
+    elementType: text
+    bounds: [154, 63, 756, 100]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><span style="color: #262626;"><strong>D · A5 EP32（decode）</strong>：单次前向 53.6ms，<strong>访存主导 53.4%</strong> + 计算 32.1% + 通信 14.5%——MoE 组矩阵乘 mac 仅 ~50%、搬运 170%+，Cube 未喂饱</span></li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><span style="color: #262626;"><strong>P · A3 Prefill（PD 分离 40k）</strong>：单次前向 1791ms，<strong>通信主导 54.7%</strong>（KV broadcast + a2a + send）；设备利用率 97.4%，但 KV 传输窗口内主流仅 51% 在算</span></li><li style="text-align: left; line-height: 1.35; margin-top: 3px;"><span style="color: #262626;"><strong>形态对比</strong>：D = 访存主导 + 通信次之，P = 通信主导；通信占比随规模继续走高（ep32→ep64：14.6→15.5%），是全链路共性短板、第一优化优先级</span></li></ul>
+      wrap: true
+      align:
+        - left
+        - middle
+      style: $text4
+  - elementId: load-label
+    elementType: text
+    bounds: [44, 178, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">部署负载画像（D · A5 EP32 / P · A3 Prefill）</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: load-table
+    elementType: table
+    bounds: [44, 196, 880, 110]
+    columnWidths:
+      - 0.17
+      - 0.29
+      - 0.14
+      - 0.4
+    rowHeights:
+      - 0.22
+      - 0.39
+      - 0.39
+    rows:
+      - - text: |-
+            <p style="text-align: left;">部署</p>
+        - text: |-
+            <p style="text-align: left;">并行策略</p>
+        - text: |-
+            <p style="text-align: left;">耗时（单次前向）</p>
+        - text: |-
+            <p style="text-align: left;">负载占比（busy 归属）</p>
+      - - text: |-
+            <p style="text-align: left;"><strong>D · A5 EP32</strong></p><p style="text-align: left;">Decode</p>
+        - text: |-
+            <p style="text-align: left;">BS32 / EP32 / DCP；DSpark 投机解码（draft 推 5 步）</p>
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;"><strong>53.6ms</strong>/步</p>
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;"><span style="color: #B45309;"><strong>访存 53.4%</strong></span>（37.7ms） &gt; <span style="color: #15803D;"><strong>计算 32.1%</strong></span>（22.7ms） &gt; <span style="color: #B91C1C;"><strong>通信 14.5%</strong></span>（10.2ms）</p>
+          fontSize: 8
+      - - text: |-
+            <p style="text-align: left;"><strong>P · A3 Prefill</strong></p><p style="text-align: left;">PD 分离</p>
+        - text: |-
+            <p style="text-align: left;">random 40k tokens，6 chunk 前向；TP RS/AG 逐层 + EP alltoallv</p>
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;"><strong>1791ms</strong>/前向</p>
+          fontSize: 8
+        - text: |-
+            <p style="text-align: left;"><span style="color: #B91C1C;"><strong>通信 54.7%</strong></span>（≈1783ms） &gt; <span style="color: #15803D;"><strong>计算 19.1%</strong></span>（623ms） ≈ <span style="color: #B45309;"><strong>访存 17.9%</strong></span>（583ms）</p>
+          fontSize: 8
+    style: $tbl
+  - elementId: bound-label
+    elementType: text
+    bounds: [44, 316, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">P/D 主要 bound 归因分析</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: bound-table
+    elementType: table
+    bounds: [44, 334, 880, 92]
+    columnWidths:
+      - 0.11
+      - 0.31
+      - 0.31
+      - 0.27
+    rowHeights:
+      - 0.16
+      - 0.28
+      - 0.28
+      - 0.28
+    rows:
+      - - text: |-
+            <p style="text-align: left;">模块</p>
+        - text: |-
+            <p style="text-align: left;">D · A5 EP32（bound 画像）</p>
+        - text: |-
+            <p style="text-align: left;">P · A3 Prefill（bound 画像）</p>
+        - text: |-
+            <p style="text-align: left;">归因与结论</p>
+      - - text: |-
+            <p style="text-align: left;"><strong>Attention 组</strong></p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><span style="color: #15803D;"><strong>计算 bound</strong></span>：流水 59% vs 访存 41%（FlashMla 计算 + RecurrentKda vec）</p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><strong>均衡偏计算</strong>：51% vs 49%（ChunkKdaFwd 计算主导 + FIA 拉回访存）</p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;">两侧均非瓶颈主因，算子效率已较优</p>
+          fontSize: 7.5
+      - - text: |-
+            <p style="text-align: left;"><strong>MoE 组</strong></p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><span style="color: #B45309;"><strong>访存 bound</strong></span> + 通信显著：mac ~50% / mte 170%+，dispatch/combine 4.3ms = MoE 的 14%</p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><span style="color: #B45309;"><strong>访存 bound</strong></span>：48% vs 52%（a2a dispatch 记在通信桶未入组）</p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;">D 访存瓶颈核心（占 busy 43%）；P 侧第二大耗时块</p>
+          fontSize: 7.5
+      - - text: |-
+            <p style="text-align: left;"><strong>通信</strong></p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><span style="color: #B91C1C;"><strong>RS/AG/a2a 细粒度</strong></span>：10.2ms/步（14.5%），~380 次/步、单次 18–24µs</p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><span style="color: #B91C1C;"><strong>KV broadcast 0.92s + a2a 1.63s + send 1.01s</strong></span>，去重后 54.7%</p>
+          fontSize: 7.5
+        - text: |-
+            <p style="text-align: left;"><strong>全链路第一优化优先级</strong>：P 重叠不足、D 粒度太细</p>
+          fontSize: 7.5
+    style: $tbl
+  - elementId: bound-note
+    elementType: text
+    bounds: [44, 430, 880, 26]
+    content:
+      text: |-
+        <p style="text-align: left; line-height: 1.35;"><strong>归因小结</strong>：D 侧 53.4% 访存中 MoE 权重搬运是主体（两个 GroupedMatmul 核合计 15.9ms/步）；P 侧 54.7% 通信中 KV 分发（broadcast + send ≈1.93s）与 MoE dispatch（a2a 1.63s）约各占一半——两侧瓶颈不同源，需分别施策。</p>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text13
+  - elementId: view-label
+    elementType: text
+    bounds: [44, 462, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">专家观点</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text5
+  - elementId: view-bullets
+    elementType: text
+    bounds: [44, 480, 876, 56]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><strong>「算得快」不再是主要矛盾，「传得动」才是</strong>：通信在 P 侧占 54.7%、在 D 侧随规模 14.6→15.5% 持续走高——大模型推理的优化主战场正从单核算力转向数据搬运与互连效率</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>高利用率 ≠ 高效率</strong>：P 侧设备利用率高达 97.4%，但 KV 传输窗口内主流仅 51% 在算，近一半时间算力被通信等待占据——流水掩盖能力比堆砌算力更能兑现硬件价值</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>Decode 的吞吐天花板由访存决定</strong>：MoE 权重读取让组矩阵乘 mac 仅 ~50%，带宽而非算力构成瓶颈；但批量扩展性优秀——BS32→BS128 迭代仅 +9.8%、等效吞吐 ≈3.6×，规模红利依然丰厚</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>P/D 分离让两类矛盾可以分而治之</strong>：P 侧集中解决通信重叠（存在 TTFT ≈ −30% 的压缩空间），D 侧集中精力喂饱 Cube，两条优化路径互不阻塞、可独立推进</li></ul>
+      wrap: true
+      align:
+        - left
+        - top
+      style: $text13
