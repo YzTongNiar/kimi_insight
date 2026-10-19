@@ -1,0 +1,940 @@
+[
+  {
+    "label": "P (prefill)",
+    "outdir": "C:\\Users\\Jarvis\\Desktop\\kimi_insight\\profiling\\kimik3_A3_prefill\\ASCEND_PROFILER_OUTPUT",
+    "kernel_rows": 63874,
+    "op_rows": 77,
+    "trace": {
+      "Computing": 6475331.850000009,
+      "Communication": 7503982.620999989,
+      "Communication(Not Overlapped)": 3993408.3260003543,
+      "Overlapped": 3510574.294999635,
+      "Free": 460647.8750000792,
+      "Stage": 10929388.25,
+      "Preparing": 1171.5
+    },
+    "pipe": {
+      "compute": 6094038.602999968,
+      "memory": 6754674.770000024,
+      "communication": 12320975.464999912
+    },
+    "pipe_total": 25169688.837999903,
+    "kernel_comp": {
+      "other": 3608322.345999948,
+      "moe": 1617692.4720000036,
+      "communication": 12320975.464999912,
+      "attention": 2024752.9940000006
+    },
+    "op_comp": {
+      "moe": 1617692.472,
+      "attention": 2005160.932,
+      "other": 3627914.408,
+      "communication": 734552.5410000001
+    },
+    "top_ops": [
+      {
+        "name": "GroupedMatmul",
+        "time_us": 1396574.62,
+        "count": 1104,
+        "ratio": 17.489,
+        "component": "moe",
+        "core": "MIX_AIC"
+      },
+      {
+        "name": "ChunkKdaFwd",
+        "time_us": 1333460.047,
+        "count": 432,
+        "ratio": 16.699,
+        "component": "attention",
+        "core": "MIX_AIC"
+      },
+      {
+        "name": "DequantSituQuant",
+        "time_us": 784557.735,
+        "count": 1104,
+        "ratio": 9.825,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "QuantBatchMatmulV3",
+        "time_us": 752519.953,
+        "count": 2424,
+        "ratio": 9.424,
+        "component": "other",
+        "core": "MIX_AIC"
+      },
+      {
+        "name": "DynamicQuant",
+        "time_us": 665931.13,
+        "count": 2976,
+        "ratio": 8.339,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "FusedInferAttentionScore",
+        "time_us": 487768.919,
+        "count": 288,
+        "ratio": 6.108,
+        "component": "attention",
+        "core": "MIX_AIC"
+      },
+      {
+        "name": "allgatherAicpuKernel",
+        "time_us": 383625.104,
+        "count": 1248,
+        "ratio": 4.804,
+        "component": "communication",
+        "core": "AI_CPU"
+      },
+      {
+        "name": "MatMulV3",
+        "time_us": 361992.662,
+        "count": 984,
+        "ratio": 4.533,
+        "component": "other",
+        "core": "AI_CORE"
+      },
+      {
+        "name": "reduce_scatterAicpuKernel",
+        "time_us": 332452.51,
+        "count": 1152,
+        "ratio": 4.163,
+        "component": "communication",
+        "core": "AI_CPU"
+      },
+      {
+        "name": "MatMulV2",
+        "time_us": 286608.103,
+        "count": 1008,
+        "ratio": 3.589,
+        "component": "other",
+        "core": "AI_CORE"
+      },
+      {
+        "name": "QuantBatchMatmulV3",
+        "time_us": 184962.165,
+        "count": 552,
+        "ratio": 2.316,
+        "component": "other",
+        "core": "AI_CORE"
+      },
+      {
+        "name": "MoeTokenUnpermute",
+        "time_us": 80338.29,
+        "count": 1104,
+        "ratio": 1.006,
+        "component": "moe",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "_apply_attn_res_kernel",
+        "time_us": 76119.885,
+        "count": 1128,
+        "ratio": 0.953,
+        "component": "attention",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "MoeInitRoutingV3",
+        "time_us": 74776.901,
+        "count": 552,
+        "ratio": 0.936,
+        "component": "moe",
+        "core": "MIX_AIV"
+      },
+      {
+        "name": "Slice",
+        "time_us": 65668.527,
+        "count": 5790,
+        "ratio": 0.822,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "CausalConv1d",
+        "time_us": 63075.794,
+        "count": 432,
+        "ratio": 0.79,
+        "component": "attention",
+        "core": "MIX_AIC"
+      },
+      {
+        "name": "RmsNorm",
+        "time_us": 51246.072,
+        "count": 1992,
+        "ratio": 0.642,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "PadV3",
+        "time_us": 49607.126,
+        "count": 196,
+        "ratio": 0.621,
+        "component": "other",
+        "core": "MIX_AIV"
+      },
+      {
+        "name": "MoeTokenPermute",
+        "time_us": 48422.106,
+        "count": 552,
+        "ratio": 0.606,
+        "component": "moe",
+        "core": "MIX_AIV"
+      },
+      {
+        "name": "AttentionUpdate",
+        "time_us": 44736.287,
+        "count": 144,
+        "ratio": 0.56,
+        "component": "attention",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "AsStrided",
+        "time_us": 39885.992,
+        "count": 864,
+        "ratio": 0.499,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "Add",
+        "time_us": 37097.174,
+        "count": 2904,
+        "ratio": 0.465,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "layer_norm_gated_fwd_kernel",
+        "time_us": 28058.143,
+        "count": 432,
+        "ratio": 0.351,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "TensorMove",
+        "time_us": 24158.576,
+        "count": 1032,
+        "ratio": 0.303,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "l2norm_fwd_kernel2",
+        "time_us": 22156.476,
+        "count": 864,
+        "ratio": 0.277,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "allreduceAicpuKernel",
+        "time_us": 20593.507,
+        "count": 24,
+        "ratio": 0.258,
+        "component": "other",
+        "core": "AI_CPU"
+      },
+      {
+        "name": "Cast",
+        "time_us": 19952.409,
+        "count": 5964,
+        "ratio": 0.25,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "Transpose",
+        "time_us": 19592.062,
+        "count": 1296,
+        "ratio": 0.245,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "batch_memcpy_kernel",
+        "time_us": 17722.84,
+        "count": 864,
+        "ratio": 0.222,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "MoeGatingTopK",
+        "time_us": 17534.615,
+        "count": 552,
+        "ratio": 0.22,
+        "component": "moe",
+        "core": "AI_VECTOR_CORE"
+      }
+    ],
+    "comp_top": {
+      "attention": [
+        {
+          "name": "ChunkKdaFwd",
+          "time_us": 1333460.047,
+          "count": 432,
+          "ratio": 16.699,
+          "component": "attention",
+          "core": "MIX_AIC"
+        },
+        {
+          "name": "FusedInferAttentionScore",
+          "time_us": 487768.919,
+          "count": 288,
+          "ratio": 6.108,
+          "component": "attention",
+          "core": "MIX_AIC"
+        },
+        {
+          "name": "_apply_attn_res_kernel",
+          "time_us": 76119.885,
+          "count": 1128,
+          "ratio": 0.953,
+          "component": "attention",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "CausalConv1d",
+          "time_us": 63075.794,
+          "count": 432,
+          "ratio": 0.79,
+          "component": "attention",
+          "core": "MIX_AIC"
+        },
+        {
+          "name": "AttentionUpdate",
+          "time_us": 44736.287,
+          "count": 144,
+          "ratio": 0.56,
+          "component": "attention",
+          "core": "AI_VECTOR_CORE"
+        }
+      ],
+      "moe": [
+        {
+          "name": "GroupedMatmul",
+          "time_us": 1396574.62,
+          "count": 1104,
+          "ratio": 17.489,
+          "component": "moe",
+          "core": "MIX_AIC"
+        },
+        {
+          "name": "MoeTokenUnpermute",
+          "time_us": 80338.29,
+          "count": 1104,
+          "ratio": 1.006,
+          "component": "moe",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "MoeInitRoutingV3",
+          "time_us": 74776.901,
+          "count": 552,
+          "ratio": 0.936,
+          "component": "moe",
+          "core": "MIX_AIV"
+        },
+        {
+          "name": "MoeTokenPermute",
+          "time_us": 48422.106,
+          "count": 552,
+          "ratio": 0.606,
+          "component": "moe",
+          "core": "MIX_AIV"
+        },
+        {
+          "name": "MoeGatingTopK",
+          "time_us": 17534.615,
+          "count": 552,
+          "ratio": 0.22,
+          "component": "moe",
+          "core": "AI_VECTOR_CORE"
+        }
+      ],
+      "communication": [
+        {
+          "name": "allgatherAicpuKernel",
+          "time_us": 383625.104,
+          "count": 1248,
+          "ratio": 4.804,
+          "component": "communication",
+          "core": "AI_CPU"
+        },
+        {
+          "name": "reduce_scatterAicpuKernel",
+          "time_us": 332452.51,
+          "count": 1152,
+          "ratio": 4.163,
+          "component": "communication",
+          "core": "AI_CPU"
+        }
+      ],
+      "other": [
+        {
+          "name": "DequantSituQuant",
+          "time_us": 784557.735,
+          "count": 1104,
+          "ratio": 9.825,
+          "component": "other",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "QuantBatchMatmulV3",
+          "time_us": 752519.953,
+          "count": 2424,
+          "ratio": 9.424,
+          "component": "other",
+          "core": "MIX_AIC"
+        },
+        {
+          "name": "DynamicQuant",
+          "time_us": 665931.13,
+          "count": 2976,
+          "ratio": 8.339,
+          "component": "other",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "MatMulV3",
+          "time_us": 361992.662,
+          "count": 984,
+          "ratio": 4.533,
+          "component": "other",
+          "core": "AI_CORE"
+        },
+        {
+          "name": "MatMulV2",
+          "time_us": 286608.103,
+          "count": 1008,
+          "ratio": 3.589,
+          "component": "other",
+          "core": "AI_CORE"
+        },
+        {
+          "name": "QuantBatchMatmulV3",
+          "time_us": 184962.165,
+          "count": 552,
+          "ratio": 2.316,
+          "component": "other",
+          "core": "AI_CORE"
+        },
+        {
+          "name": "Slice",
+          "time_us": 65668.527,
+          "count": 5790,
+          "ratio": 0.822,
+          "component": "other",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "RmsNorm",
+          "time_us": 51246.072,
+          "count": 1992,
+          "ratio": 0.642,
+          "component": "other",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "PadV3",
+          "time_us": 49607.126,
+          "count": 196,
+          "ratio": 0.621,
+          "component": "other",
+          "core": "MIX_AIV"
+        },
+        {
+          "name": "AsStrided",
+          "time_us": 39885.992,
+          "count": 864,
+          "ratio": 0.499,
+          "component": "other",
+          "core": "AI_VECTOR_CORE"
+        }
+      ]
+    }
+  },
+  {
+    "label": "D (decode)",
+    "outdir": "C:\\Users\\Jarvis\\Desktop\\kimi_insight\\profiling\\kimik3_A5_decode\\dp0_pp0_tp0_dcp0_ep0_rank0_206423_20260922062150219_ascend_pt\\ASCEND_PROFILER_OUTPUT",
+    "kernel_rows": 146289,
+    "op_rows": 87,
+    "trace": {
+      "Computing": 1909769.4759999823,
+      "Communication": 323909.27799999836,
+      "Communication(Not Overlapped)": 142753.5069999766,
+      "Overlapped": 181155.77100002175,
+      "Free": 83029.40299990786,
+      "Stage": 2135552.5,
+      "Preparing": 2469.25
+    },
+    "pipe": {
+      "compute": 2583644.473999977,
+      "memory": 2965027.058999995,
+      "communication": 398042.88299999933
+    },
+    "pipe_total": 5946714.415999971,
+    "kernel_comp": {
+      "other": 1044989.3009999988,
+      "moe": 817354.637,
+      "attention": 492027.2430000026,
+      "communication": 398042.88299999933
+    },
+    "op_comp": {
+      "moe": 817354.6370000001,
+      "attention": 492027.243,
+      "other": 1044989.3010000004,
+      "communication": 65700.725
+    },
+    "top_ops": [
+      {
+        "name": "GroupedMatmulSituQuant",
+        "time_us": 405278.863,
+        "count": 3588,
+        "ratio": 16.747,
+        "component": "moe",
+        "core": "MIX_AIC"
+      },
+      {
+        "name": "FlashMlaWithKvcache",
+        "time_us": 249041.141,
+        "count": 2067,
+        "ratio": 10.291,
+        "component": "attention",
+        "core": "MIX_AIC"
+      },
+      {
+        "name": "GroupedMatmul",
+        "time_us": 215590.079,
+        "count": 3588,
+        "ratio": 8.908,
+        "component": "moe",
+        "core": "MIX_AIC"
+      },
+      {
+        "name": "SituMxQuant",
+        "time_us": 212783.656,
+        "count": 3588,
+        "ratio": 8.792,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "QuantBatchMatmulV4",
+        "time_us": 166161.935,
+        "count": 7176,
+        "ratio": 6.866,
+        "component": "other",
+        "core": "MIX_AIC"
+      },
+      {
+        "name": "QuantBatchMatmulV3",
+        "time_us": 157749.458,
+        "count": 9945,
+        "ratio": 6.518,
+        "component": "other",
+        "core": "AI_CORE"
+      },
+      {
+        "name": "MatMulV3",
+        "time_us": 140158.861,
+        "count": 7995,
+        "ratio": 5.792,
+        "component": "other",
+        "core": "AI_CORE"
+      },
+      {
+        "name": "MatMulV3",
+        "time_us": 116958.949,
+        "count": 4251,
+        "ratio": 4.833,
+        "component": "other",
+        "core": "MIX_AIC"
+      },
+      {
+        "name": "MoeDistributeDispatchV3",
+        "time_us": 93162.054,
+        "count": 3588,
+        "ratio": 3.85,
+        "component": "moe",
+        "core": "MIX_AIV"
+      },
+      {
+        "name": "MoeDistributeCombineV3",
+        "time_us": 73355.92,
+        "count": 3588,
+        "ratio": 3.031,
+        "component": "moe",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "RecurrentKda",
+        "time_us": 70839.521,
+        "count": 2691,
+        "ratio": 2.927,
+        "component": "attention",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "DynamicMxQuant",
+        "time_us": 66500.273,
+        "count": 14469,
+        "ratio": 2.748,
+        "component": "other",
+        "core": "MIX_AIV"
+      },
+      {
+        "name": "HcclLaunchAicpuKernel",
+        "time_us": 65478.048,
+        "count": 507,
+        "ratio": 2.706,
+        "component": "communication",
+        "core": "AI_CPU"
+      },
+      {
+        "name": "AttnResFwdFused",
+        "time_us": 64865.26,
+        "count": 7293,
+        "ratio": 2.68,
+        "component": "attention",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "MlaPrologV3",
+        "time_us": 38273.203,
+        "count": 936,
+        "ratio": 1.581,
+        "component": "attention",
+        "core": "MIX_AIC"
+      },
+      {
+        "name": "CausalConv1dV2",
+        "time_us": 28474.453,
+        "count": 2691,
+        "ratio": 1.177,
+        "component": "attention",
+        "core": "MIX_AIV"
+      },
+      {
+        "name": "MoeGatingTopK",
+        "time_us": 21309.952,
+        "count": 3588,
+        "ratio": 0.881,
+        "component": "moe",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "FlashMlaWithKvcacheMetadata",
+        "time_us": 20948.176,
+        "count": 195,
+        "ratio": 0.866,
+        "component": "attention",
+        "core": "AI_CPU"
+      },
+      {
+        "name": "layer_norm_gated_fwd_kernel",
+        "time_us": 18958.687,
+        "count": 2691,
+        "ratio": 0.783,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "Slice",
+        "time_us": 18772.527,
+        "count": 6552,
+        "ratio": 0.776,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "_merge_vectorized",
+        "time_us": 18271.923,
+        "count": 936,
+        "ratio": 0.755,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "RmsNorm",
+        "time_us": 17685.73,
+        "count": 4290,
+        "ratio": 0.731,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "_pack",
+        "time_us": 17347.288,
+        "count": 936,
+        "ratio": 0.717,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "Cast",
+        "time_us": 14229.455,
+        "count": 8034,
+        "ratio": 0.588,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "Add",
+        "time_us": 12252.264,
+        "count": 4290,
+        "ratio": 0.506,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "_quantize_mla_query_kernel",
+        "time_us": 11922.46,
+        "count": 936,
+        "ratio": 0.493,
+        "component": "attention",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "_fused_sfa_dcp_lse_combine_kernel",
+        "time_us": 8478.841,
+        "count": 195,
+        "ratio": 0.35,
+        "component": "moe",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "Sigmoid",
+        "time_us": 7778.382,
+        "count": 2730,
+        "ratio": 0.321,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      },
+      {
+        "name": "TransposeBatchMatMul",
+        "time_us": 6308.38,
+        "count": 1131,
+        "ratio": 0.261,
+        "component": "other",
+        "core": "AI_CORE"
+      },
+      {
+        "name": "ConcatD",
+        "time_us": 5500.719,
+        "count": 1209,
+        "ratio": 0.227,
+        "component": "other",
+        "core": "AI_VECTOR_CORE"
+      }
+    ],
+    "comp_top": {
+      "attention": [
+        {
+          "name": "FlashMlaWithKvcache",
+          "time_us": 249041.141,
+          "count": 2067,
+          "ratio": 10.291,
+          "component": "attention",
+          "core": "MIX_AIC"
+        },
+        {
+          "name": "RecurrentKda",
+          "time_us": 70839.521,
+          "count": 2691,
+          "ratio": 2.927,
+          "component": "attention",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "AttnResFwdFused",
+          "time_us": 64865.26,
+          "count": 7293,
+          "ratio": 2.68,
+          "component": "attention",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "MlaPrologV3",
+          "time_us": 38273.203,
+          "count": 936,
+          "ratio": 1.581,
+          "component": "attention",
+          "core": "MIX_AIC"
+        },
+        {
+          "name": "CausalConv1dV2",
+          "time_us": 28474.453,
+          "count": 2691,
+          "ratio": 1.177,
+          "component": "attention",
+          "core": "MIX_AIV"
+        },
+        {
+          "name": "FlashMlaWithKvcacheMetadata",
+          "time_us": 20948.176,
+          "count": 195,
+          "ratio": 0.866,
+          "component": "attention",
+          "core": "AI_CPU"
+        },
+        {
+          "name": "_quantize_mla_query_kernel",
+          "time_us": 11922.46,
+          "count": 936,
+          "ratio": 0.493,
+          "component": "attention",
+          "core": "AI_VECTOR_CORE"
+        }
+      ],
+      "moe": [
+        {
+          "name": "GroupedMatmulSituQuant",
+          "time_us": 405278.863,
+          "count": 3588,
+          "ratio": 16.747,
+          "component": "moe",
+          "core": "MIX_AIC"
+        },
+        {
+          "name": "GroupedMatmul",
+          "time_us": 215590.079,
+          "count": 3588,
+          "ratio": 8.908,
+          "component": "moe",
+          "core": "MIX_AIC"
+        },
+        {
+          "name": "MoeDistributeDispatchV3",
+          "time_us": 93162.054,
+          "count": 3588,
+          "ratio": 3.85,
+          "component": "moe",
+          "core": "MIX_AIV"
+        },
+        {
+          "name": "MoeDistributeCombineV3",
+          "time_us": 73355.92,
+          "count": 3588,
+          "ratio": 3.031,
+          "component": "moe",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "MoeGatingTopK",
+          "time_us": 21309.952,
+          "count": 3588,
+          "ratio": 0.881,
+          "component": "moe",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "_fused_sfa_dcp_lse_combine_kernel",
+          "time_us": 8478.841,
+          "count": 195,
+          "ratio": 0.35,
+          "component": "moe",
+          "core": "AI_VECTOR_CORE"
+        }
+      ],
+      "communication": [
+        {
+          "name": "HcclLaunchAicpuKernel",
+          "time_us": 65478.048,
+          "count": 507,
+          "ratio": 2.706,
+          "component": "communication",
+          "core": "AI_CPU"
+        }
+      ],
+      "other": [
+        {
+          "name": "SituMxQuant",
+          "time_us": 212783.656,
+          "count": 3588,
+          "ratio": 8.792,
+          "component": "other",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "QuantBatchMatmulV4",
+          "time_us": 166161.935,
+          "count": 7176,
+          "ratio": 6.866,
+          "component": "other",
+          "core": "MIX_AIC"
+        },
+        {
+          "name": "QuantBatchMatmulV3",
+          "time_us": 157749.458,
+          "count": 9945,
+          "ratio": 6.518,
+          "component": "other",
+          "core": "AI_CORE"
+        },
+        {
+          "name": "MatMulV3",
+          "time_us": 140158.861,
+          "count": 7995,
+          "ratio": 5.792,
+          "component": "other",
+          "core": "AI_CORE"
+        },
+        {
+          "name": "MatMulV3",
+          "time_us": 116958.949,
+          "count": 4251,
+          "ratio": 4.833,
+          "component": "other",
+          "core": "MIX_AIC"
+        },
+        {
+          "name": "DynamicMxQuant",
+          "time_us": 66500.273,
+          "count": 14469,
+          "ratio": 2.748,
+          "component": "other",
+          "core": "MIX_AIV"
+        },
+        {
+          "name": "layer_norm_gated_fwd_kernel",
+          "time_us": 18958.687,
+          "count": 2691,
+          "ratio": 0.783,
+          "component": "other",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "Slice",
+          "time_us": 18772.527,
+          "count": 6552,
+          "ratio": 0.776,
+          "component": "other",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "_merge_vectorized",
+          "time_us": 18271.923,
+          "count": 936,
+          "ratio": 0.755,
+          "component": "other",
+          "core": "AI_VECTOR_CORE"
+        },
+        {
+          "name": "RmsNorm",
+          "time_us": 17685.73,
+          "count": 4290,
+          "ratio": 0.731,
+          "component": "other",
+          "core": "AI_VECTOR_CORE"
+        }
+      ]
+    }
+  }
+]
