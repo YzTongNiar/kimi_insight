@@ -20,6 +20,24 @@
 
 P 的主要问题是通信：通信总量约为计算时间的 1.16 倍，且 36.5% 的阶段时间是未被计算覆盖的通信。D 的通信压力明显小，瓶颈转为计算内核本身；D 的计算占阶段 89.4%。两阶段的计算内核都没有显示出纯计算或纯访存一边倒的情况，MTE 与计算子计数器都约占活跃引擎时间的一半，说明算子融合、数据布局和量化路径都可能影响实际吞吐。
 
+
+> **口径说明：为什么 P 的 Attention/MoE 没有通信主导算子？** P 阶段的 68.7% 来自整个阶段的 `step_trace_time.csv`，包含所有 HCCL、all-gather、reduce-scatter、broadcast、send/receive 等通信；Attention/MoE 饼图只统计 Attention 和 MoE 计算算子，独立的通信算子归入 Other，因此统计范围不同。P 的通信主要来自跨卡通信路径，并不意味着每个 Attention/MoE kernel 内部都由通信主导。68.7% 是 Stage 墙钟时间线的通信占比，饼图是 Attention/MoE 算子累计时间构成，不能直接互相替代。
+
+
+
+> **通信算子统计口径修正：** MindStudio Insight Communication View 中的 `hcom_alltoallv_` 来自 `kernel_details.csv` 的通信 kernel 类型；此前 Attention/MoE 全量饼图主要使用 `op_statistic.csv`，该文件不包含 hcom 通信 kernel，所以漏掉了 all-to-all。P 的通信 kernel 类型中，`hcom_broadcast_` 约占 kernel 累计时长 28.27%，`hcom_alltoallv_` 约占 16.63%，`hcom_send_` 约占 5.15%，`hcom_reduceScatter_` 约占 4.71%，`hcom_allGather_` 约占 4.15%。MindStudio 显示的 19.75% 可能使用了不同的分母和时间去重规则；all-to-all 应从 Communication View 统计。
+
+### 阶段全量算子构成（含通信）
+
+为使饼图与阶段级通信结论一致，补充纳入独立通信算子：P 包含 all-gather、reduce-scatter、send/broadcast；D 包含 MoeDistributeDispatch/Combine 和 HcclLaunchAicpuKernel。按 `op_statistic.csv` 累计算子时间汇总：
+
+|阶段|Attention|MoE|通信算子|Other|
+|---|---:|---:|---:|---:|
+|P Prefill|25.1%|50.6%|9.2%|15.1%|
+|D Decode|20.0%|41.0%|9.6%|29.4%|
+
+其中 P 的通信算子主要是 `allgatherAicpuKernel`（通信类别内部 52.2%）和 `reduce_scatterAicpuKernel`（45.3%）；D 的通信算子主要是 `MoeDistributeDispatchV3`、`MoeDistributeCombineV3` 和 `HcclLaunchAicpuKernel`。HTML 报告中的全量算子饼图同时展示了这些通信算子。
+
 ### Kernel 资源视图：访存 / 计算 / 通信
 
 以下比例按 `kernel_details.csv` 的资源忙碌量归一化：MTE 计数器归为访存，MAC/标量/向量计数器归为计算，通信核时长归为通信。它用于比较 kernel 资源构成，不等同于 Stage 墙钟时间；资源之间可能并行重叠。
