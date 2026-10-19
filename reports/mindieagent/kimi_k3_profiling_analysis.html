@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kimi K3 P/D Profiling 分析</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#e5e7eb;--blue:#2563eb;--cyan:#0891b2;--orange:#ea580c;--green:#059669;--purple:#7c3aed;--red:#dc2626}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",Arial,sans-serif}main{max-width:1180px;margin:0 auto;padding:34px 22px 60px}h1{font-size:32px;line-height:1.25;margin:0 0 8px}h2{font-size:21px;margin:34px 0 14px;border-left:4px solid var(--blue);padding-left:10px}h3{font-size:17px;margin:22px 0 8px}.subtitle{color:var(--muted);margin:0 0 24px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 2px 8px #1720330a}.metric{font-size:28px;font-weight:700}.label{color:var(--muted);font-size:13px}.tag{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600}.p{background:#dbeafe;color:#1d4ed8}.d{background:#dcfce7;color:#047857}.callout{background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;margin:18px 0}.warn{background:#fff7ed;border-color:#fed7aa}.table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px}table{border-collapse:collapse;width:100%;min-width:760px}th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:#f8fafc;font-weight:650;color:#344054}tr:last-child td{border-bottom:0}.bar-row{display:grid;grid-template-columns:170px 1fr 70px;gap:10px;align-items:center;margin:9px 0}.bar{height:14px;background:#e5e7eb;border-radius:99px;overflow:hidden}.fill{height:100%;border-radius:99px}.fill.blue{background:var(--blue)}.fill.cyan{background:var(--cyan)}.fill.orange{background:var(--orange)}.fill.green{background:var(--green)}.fill.purple{background:var(--purple)}.small{color:var(--muted);font-size:13px}.two{display:grid;grid-template-columns:1fr 1fr;gap:18px}.priority{border-left:4px solid var(--orange);padding:10px 14px;background:#fff;border-radius:8px;margin:10px 0}.priority strong{display:block;margin-bottom:3px}.footer{margin-top:34px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:16px}@media(max-width:800px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two{grid-template-columns:1fr}.bar-row{grid-template-columns:135px 1fr 60px}}@media(max-width:480px){main{padding:24px 14px}.grid{grid-template-columns:1fr 1fr}h1{font-size:26px}.bar-row{grid-template-columns:112px 1fr 52px;font-size:13px}}
+</style>
+</head>
+<body><main>
+<h1>Kimi K3 P/D Profiling 分析</h1>
+<p class="subtitle">Prefill（P）与 Decode（D）阶段负载、Attention/MoE 构成及算子优化优先级</p>
+<div class="grid">
+<div class="card"><div class="label">P 阶段通信 / Stage</div><div class="metric" style="color:var(--red)">68.7%</div><div class="small">未重叠通信 36.5%</div></div>
+<div class="card"><div class="label">D 阶段计算 / Stage</div><div class="metric" style="color:var(--green)">89.4%</div><div class="small">通信总量 15.2%</div></div>
+<div class="card"><div class="label">P 阶段 MoE 算子负载</div><div class="metric" style="color:var(--orange)">50.6%</div><div class="small">Attention 25.1%</div></div>
+<div class="card"><div class="label">D 阶段 MoE 算子负载</div><div class="metric" style="color:var(--orange)">47.9%</div><div class="small">Attention 20.0%</div></div>
+</div>
+<div class="callout"><b>结论：</b>P 阶段的首要问题是通信与 MoE，D 阶段的首要问题是 Attention/MoE 计算内核及访存效率。两类时间存在并行重叠，因此通信占比和计算占比不能强行相加到 100%。</div>
+<h2>1. P/D 阶段负载</h2>
+<div class="table-wrap"><table><thead><tr><th>阶段</th><th>Stage (us)</th><th>计算 Computing</th><th>通信总量</th><th>未重叠通信</th><th>重叠通信</th><th>访存 / 计算（活跃引擎）</th></tr></thead><tbody>
+<tr><td><span class="tag p">P Prefill</span></td><td>10,929,388</td><td>6,475,332 / <b>59.2%</b></td><td>7,503,983 / <b>68.7%</b></td><td>3,993,408 / <b>36.5%</b></td><td>3,510,574 / <b>32.1%</b></td><td><b>51.3%</b> / <b>48.7%</b></td></tr>
+<tr><td><span class="tag d">D Decode</span></td><td>2,135,553</td><td>1,909,769 / <b>89.4%</b></td><td>323,909 / <b>15.2%</b></td><td>142,754 / <b>6.7%</b></td><td>181,156 / <b>8.5%</b></td><td><b>50.4%</b> / <b>49.6%</b></td></tr>
+</tbody></table></div>
+<div class="two" style="margin-top:18px"><div class="card"><h3>P 阶段 Stage 构成</h3><div class="bar-row"><span>计算</span><div class="bar"><div class="fill blue" style="width:59.2%"></div></div><b>59.2%</b></div><div class="bar-row"><span>通信总量</span><div class="bar"><div class="fill orange" style="width:68.7%"></div></div><b>68.7%</b></div><div class="bar-row"><span>未重叠通信</span><div class="bar"><div class="fill red" style="width:36.5%;background:var(--red)"></div></div><b>36.5%</b></div></div><div class="card"><h3>D 阶段 Stage 构成</h3><div class="bar-row"><span>计算</span><div class="bar"><div class="fill green" style="width:89.4%"></div></div><b>89.4%</b></div><div class="bar-row"><span>通信总量</span><div class="bar"><div class="fill cyan" style="width:15.2%"></div></div><b>15.2%</b></div><div class="bar-row"><span>未重叠通信</span><div class="bar"><div class="fill purple" style="width:6.7%"></div></div><b>6.7%</b></div></div></div>
+<h2>2. Attention / MoE 负载构成</h2>
+<div class="table-wrap"><table><thead><tr><th>阶段</th><th>算子累计时间 (us)</th><th>Attention</th><th>MoE</th><th>Other</th></tr></thead><tbody><tr><td><span class="tag p">P</span></td><td>7,985,320</td><td>2,005,161 / <b>25.1%</b></td><td>4,043,506 / <b>50.6%</b></td><td>24.3%</td></tr><tr><td><span class="tag d">D</span></td><td>2,420,072</td><td>483,203 / <b>20.0%</b></td><td>1,159,345 / <b>47.9%</b></td><td>32.1%</td></tr></tbody></table></div>
+<div class="two" style="margin-top:18px"><div class="card"><h3>P Attention / MoE</h3><div class="bar-row"><span>Attention</span><div class="bar"><div class="fill blue" style="width:25.1%"></div></div><b>25.1%</b></div><div class="bar-row"><span>MoE</span><div class="bar"><div class="fill orange" style="width:50.6%"></div></div><b>50.6%</b></div><p class="small">Attention 内部：ChunkKdaFwd 66.5%，FusedInferAttentionScore 24.3%。MoE 内部前四项（GroupedMatmul、DequantSituQuant、QuantBatchMatmulV3、DynamicQuant）合计 89.0%。</p></div><div class="card"><h3>D Attention / MoE</h3><div class="bar-row"><span>Attention</span><div class="bar"><div class="fill cyan" style="width:20%"></div></div><b>20.0%</b></div><div class="bar-row"><span>MoE</span><div class="bar"><div class="fill orange" style="width:47.9%"></div></div><b>47.9%</b></div><p class="small">Attention 内部：FlashMlaWithKvcache、RecurrentKda、AttnResFwdFused、MlaPrologV3 合计 87.5%。MoE 内部前四项合计 81.5%。</p></div></div>
+<h2>3. 算子瓶颈与优化优先级</h2>
+<div class="priority"><strong><span class="tag p">P Attention</span> ChunkKdaFwd → FusedInferAttentionScore</strong>优先检查 KDA 的 kernel 融合、KV/中间张量读写、布局转换和 tiling；并将 Attention 计算与通信等待流水重叠。</div>
+<div class="priority"><strong><span class="tag p">P MoE</span> GroupedMatmul → DequantSituQuant / DynamicQuant → QuantBatchMatmulV3</strong>重点优化专家 token 聚合、小矩阵利用率、量化与 matmul 融合，以及 token permute；同时优化 all-to-all/dispatch/combine 与专家计算的重叠。</div>
+<div class="priority"><strong><span class="tag d">D Attention</span> FlashMlaWithKvcache → RecurrentKda → AttnResFwdFused</strong>优先检查 KV cache 访问合并、cache layout、单 token 向量化、MTE 利用率和 launch/同步固定开销。</div>
+<div class="priority"><strong><span class="tag d">D MoE</span> GroupedMatmulSituQuant → GroupedMatmul → QuantBatchMatmulV4/V3</strong>针对 decode 的小 token batch 选择低延迟 tiling，融合 grouped matmul 与 situ quant，并检查 dispatch/combine 的搬运和专家负载均衡。</div>
+
+<h2>4. P/D TOP10 耗时算子及 Bound</h2>
+<p class="small">TOP10 按 <code>op_statistic.csv</code> 的算子累计耗时排序。访存/计算来自对应 kernel 的 MTE 与 MAC/向量计数器；通信算子按 HCCL/all-gather/reduce-scatter/dispatch/combine 归为通信。Bound 取占比最高的资源，接近时标为混合 bound。</p>
+<h3><span class="tag p">P Prefill TOP10</span></h3>
+<div class="table-wrap"><table><thead><tr><th>#</th><th>算子</th><th>累计耗时 (us)</th><th>占阶段算子时间</th><th>访存</th><th>计算</th><th>通信</th><th>Bound</th></tr></thead><tbody>
+<tr><td>1</td><td>GroupedMatmul</td><td>1,396,575</td><td>17.49%</td><td>58.6%</td><td>41.4%</td><td>0.0%</td><td><b>访存主导</b></td></tr>
+<tr><td>2</td><td>ChunkKdaFwd</td><td>1,333,460</td><td>16.70%</td><td>34.7%</td><td>65.3%</td><td>0.0%</td><td><b>计算 bound</b></td></tr>
+<tr><td>3</td><td>DequantSituQuant</td><td>784,558</td><td>9.83%</td><td>22.3%</td><td>77.7%</td><td>0.0%</td><td><b>计算 bound</b></td></tr>
+<tr><td>4</td><td>QuantBatchMatmulV3</td><td>752,520</td><td>9.42%</td><td>44.2%</td><td>55.8%</td><td>0.0%</td><td><b>计算主导</b></td></tr>
+<tr><td>5</td><td>DynamicQuant</td><td>665,931</td><td>8.34%</td><td>28.0%</td><td>72.0%</td><td>0.0%</td><td><b>计算 bound</b></td></tr>
+<tr><td>6</td><td>FusedInferAttentionScore</td><td>487,769</td><td>6.11%</td><td>45.2%</td><td>54.8%</td><td>0.0%</td><td><b>混合/计算主导</b></td></tr>
+<tr><td>7</td><td>allgatherAicpuKernel</td><td>383,625</td><td>4.80%</td><td>0.0%</td><td>0.0%</td><td>100.0%</td><td><b>通信 bound</b></td></tr>
+<tr><td>8</td><td>MatMulV3</td><td>361,993</td><td>4.53%</td><td>57.2%</td><td>42.8%</td><td>0.0%</td><td><b>访存主导</b></td></tr>
+<tr><td>9</td><td>reduce_scatterAicpuKernel</td><td>332,453</td><td>4.16%</td><td>0.0%</td><td>0.0%</td><td>100.0%</td><td><b>通信 bound</b></td></tr>
+<tr><td>10</td><td>MatMulV2</td><td>286,608</td><td>3.59%</td><td>55.6%</td><td>44.4%</td><td>0.0%</td><td><b>访存主导</b></td></tr>
+</tbody></table></div>
+<h3><span class="tag d">D Decode TOP10</span></h3>
+<div class="table-wrap"><table><thead><tr><th>#</th><th>算子</th><th>累计耗时 (us)</th><th>占阶段算子时间</th><th>访存</th><th>计算</th><th>通信</th><th>Bound</th></tr></thead><tbody>
+<tr><td>1</td><td>GroupedMatmulSituQuant</td><td>405,279</td><td>16.75%</td><td>55.2%</td><td>44.8%</td><td>0.0%</td><td><b>访存主导</b></td></tr>
+<tr><td>2</td><td>FlashMlaWithKvcache</td><td>249,041</td><td>10.29%</td><td>31.9%</td><td>68.1%</td><td>0.0%</td><td><b>计算 bound</b></td></tr>
+<tr><td>3</td><td>GroupedMatmul</td><td>215,590</td><td>8.91%</td><td>54.3%</td><td>45.7%</td><td>0.0%</td><td><b>访存主导</b></td></tr>
+<tr><td>4</td><td>SituMxQuant</td><td>212,784</td><td>8.79%</td><td>33.6%</td><td>66.4%</td><td>0.0%</td><td><b>计算 bound</b></td></tr>
+<tr><td>5</td><td>QuantBatchMatmulV4</td><td>166,162</td><td>6.87%</td><td>57.7%</td><td>42.3%</td><td>0.0%</td><td><b>访存主导</b></td></tr>
+<tr><td>6</td><td>QuantBatchMatmulV3</td><td>157,749</td><td>6.52%</td><td>65.1%</td><td>34.9%</td><td>0.0%</td><td><b>访存 bound</b></td></tr>
+<tr><td>7</td><td>MatMulV3（条目1）</td><td>140,159</td><td>5.79%</td><td>64.5%</td><td>35.5%</td><td>0.0%</td><td><b>访存 bound</b></td></tr>
+<tr><td>8</td><td>MatMulV3（条目2）</td><td>116,959</td><td>4.83%</td><td>64.5%</td><td>35.5%</td><td>0.0%</td><td><b>访存 bound</b></td></tr>
+<tr><td>9</td><td>MoeDistributeDispatchV3</td><td>93,162</td><td>3.85%</td><td>0.0%</td><td>0.0%</td><td>100.0%</td><td><b>通信 bound</b></td></tr>
+<tr><td>10</td><td>MoeDistributeCombineV3</td><td>73,356</td><td>3.03%</td><td>0.0%</td><td>0.0%</td><td>100.0%</td><td><b>通信 bound</b></td></tr>
+</tbody></table></div>
+<div class="callout warn"><b>读法：</b>P 的 TOP10 中通信算子为 all-gather 和 reduce-scatter；D 的 TOP10 中 dispatch/combine 为通信主导。D 的 QuantBatchMatmul、MatMulV3 和 P 的 GroupedMatmul/MatMulV2 主要受访存约束，P 的 ChunkKdaFwd/量化算子以及 D 的 FlashMLA/SituMxQuant 更偏计算约束。</div>
+<h2>5. 统计口径</h2>
+<p class="small">阶段时间、计算和通信来自 <code>step_trace_time.csv</code>；访存/计算来自 <code>kernel_details.csv</code> 的 MTE、MAC、标量和向量计数器；Attention/MoE 来自 <code>op_statistic.csv</code> 的 Total Time 汇总。算子累计时间存在并行重叠，适合做负载构成和优化排序，不等同于串行阶段时延。</p>
+<div class="footer">数据目录：C:\Users\Jarvis\Desktop\kimi_insight\profiling<br>配套 Markdown 报告：kimi_k3_profiling_analysis.md</div>
+</main></body></html>
