@@ -564,6 +564,35 @@ sequenceDiagram
 
 技术报告方案不为每个 speculative position 保存完整 recurrent state，而是保存能够重建递推的 projected-input / replay records。验证期间从 accepted checkpoint 重放；rejection sampling 确定边界后，只提交 accepted prefix 和 bonus position。causal-conv state 也必须恢复到同一个 accepted boundary。
 
+### PR #17664：state-slot rollback 完整前向流程
+
+```mermaid
+sequenceDiagram
+    participant H as hidden states
+    participant C as causal-conv state
+    participant K as recurrent KDA
+    participant V as verifier
+    participant S as state slots
+
+    H->>C: 处理 draft hidden states
+    C->>V: 产生 spec q/k/v/gate/beta
+    V->>K: 逐位置执行 KDA recurrence
+    K->>S: 写入 Sa+1 ... Sa+6
+    S-->>V: 生成各位置 target logits
+    V->>V: rejection sampling
+
+    alt 全部接受
+        V->>C: 保留 Ca+6
+        V->>K: 保留 Sa+6
+    else 在 a+r 位置拒绝
+        V->>C: 恢复 Ca+r-1
+        V->>K: 选择 Sa+r-1
+        V->>S: 回收 rejected slots
+    end
+```
+
+该图表示 PR #17664 的核心语义：验证窗口中每个位置都把完整 recurrent state 写入独立 slot；rejection sampling 确定 accepted boundary 后，选择对应的 state slot，并将 rejected slots 标记为可复用。causal-conv state 必须同步恢复到同一 accepted boundary。
+
 ### PR #19087：RecoverSSM verify / commit
 
 ```mermaid
