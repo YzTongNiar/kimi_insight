@@ -9,7 +9,7 @@
 
 1. 阶段墙钟时间、计算和通信取 `step_trace_time.csv`。通信同时给出总通信时间和未被计算覆盖的通信时间；因为通信和计算可重叠，所以这些百分比不能直接相加。
 2. 访存/计算取 `kernel_details.csv` 的硬件子计数器：访存为 AICore/AIV 的 MTE 时间，计算为 MAC、标量和向量计算时间。该口径反映活跃计算引擎内部的资源忙碌比例，不是阶段墙钟占比。
-3. Attention/MoE 取 `op_statistic.csv` 的 `Total Time(us)` 汇总。Attention 归类包括 FlashMLA、MLA prolog、KDA、Attention、AttnRes、CausalConv 等；MoE 归类包括 GroupedMatmul、QuantBatchMatmul、量化/反量化、Moe routing/dispatch/combine、token permute、gating 等。其余归为 Other。`Total Time` 是算子累计时间，存在并行重叠，因此适合做负载构成和优化排序，不应当当作阶段串行时延。
+3. Attention/MoE 取 `op_statistic.csv` 的 `Total Time(us)` 汇总。Attention 归类包括 FlashMLA、MLA prolog、KDA、Attention、AttnRes、CausalConv 等；MoE 归类包括 GroupedMatmul、QuantBatchMatmul、量化/反量化、Moe routing/dispatch/combine、token permute、gating 等。其余归为 Other。`Total Time` 是算子累计时间，存在并行重叠，因此适合做负载构成和优化排序，不应当当作阶段串行时延。 `GroupedMatmul` 的统计表类型在 kernel 明细中对应 `aclnnGroupedMatmulWeightNz_GroupedMatmul_GroupedMatmul`，报告统一记为 `GroupedMatmulWeightNz`；它与 `GroupedMatmulSituQuant` 是两个独立的 kernel 类型。
 
 ## 1. P/D 阶段负载（Stage 资源视图）
 
@@ -36,7 +36,7 @@ P 的主要问题是通信：通信总量约为计算时间的 1.16 倍，且 36
 |P Prefill|25.1%|50.6%|9.2%|15.1%|
 |D Decode|20.0%|41.0%|9.6%|29.4%|
 
-其中 P 的通信算子主要是 `allgatherAicpuKernel`（通信类别内部 52.2%）和 `reduce_scatterAicpuKernel`（45.3%）；D 的通信算子主要是 `MoeDistributeDispatchV3`、`MoeDistributeCombineV3` 和 `HcclLaunchAicpuKernel`。HTML 报告中的全量算子饼图同时展示了这些通信算子。
+其中 P 的通信算子主要是 `allgatherAicpuKernel`（通信类别内部 52.2%）和 `reduce_scatterAicpuKernel`（45.3%）；D 的通信算子主要是 `MoeDistributeDispatchV3`、`MoeDistributeCombineV3` 和 `HcclLaunchAicpuKernel`。HTML 报告中新增的 P/D 两张“全量通信算子”饼图直接展示这些通信 kernel；它们与按 `op_statistic.csv` 汇总的计算算子饼图分开归一化。
 
 ### Kernel 资源视图：访存 / 计算 / 通信
 
@@ -76,7 +76,7 @@ Stage 构成来自阶段墙钟时间线，Kernel 资源视图来自 kernel 内�
 
 ### P MoE
 
-P 的 MoE 是最大算子负载（50.6%）。优化顺序建议为 `GroupedMatmul` → `DequantSituQuant`/`DynamicQuant` → `QuantBatchMatmulV3`，再处理 `MoeTokenPermute/Unpermute` 和 routing。重点是 grouped matmul 的专家 token 聚合与小矩阵利用率、量化/反量化与 matmul 的融合、以及 token permute 的搬运开销。P 的 all-to-all/all-gather/reduce-scatter 通信也需要和 dispatch/combine、专家计算做流水重叠。
+P 的 MoE 是最大算子负载（50.6%）。优化顺序建议为 `GroupedMatmulWeightNz` → `DequantSituQuant`/`DynamicQuant` → `QuantBatchMatmulV3`，再处理 `MoeTokenPermute/Unpermute` 和 routing。重点是 grouped matmul 的专家 token 聚合与小矩阵利用率、量化/反量化与 matmul 的融合、以及 token permute 的搬运开销。P 的 all-to-all/all-gather/reduce-scatter 通信也需要和 dispatch/combine、专家计算做流水重叠。
 
 ### D Attention
 
@@ -84,7 +84,7 @@ P 的 MoE 是最大算子负载（50.6%）。优化顺序建议为 `GroupedMatmu
 
 ### D MoE
 
-首要瓶颈是 `GroupedMatmulSituQuant` 和 `GroupedMatmul`，随后是 `QuantBatchMatmulV4/V3`。建议把 grouped matmul、situ quant、dequant/scale 计算放入更少的融合 kernel，针对 decode 的小 token batch 选择低延迟 tiling；同时检查 dispatch/combine 的数据搬运和专家负载均衡。D 的 MoE 算子累计时间占 47.9%，但阶段计算占 89.4%，因此应优先压缩 kernel 计算/访存时间，而不是先做通信优化。
+首要瓶颈是 `GroupedMatmulSituQuant` 和 `GroupedMatmulWeightNz`，随后是 `QuantBatchMatmulV4/V3`。建议把 grouped matmul、situ quant、dequant/scale 计算放入更少的融合 kernel，针对 decode 的小 token batch 选择低延迟 tiling；同时检查 dispatch/combine 的数据搬运和专家负载均衡。D 的 MoE 算子累计时间占 47.9%，但阶段计算占 89.4%，因此应优先压缩 kernel 计算/访存时间，而不是先做通信优化。
 
 ## 4. 结论
 

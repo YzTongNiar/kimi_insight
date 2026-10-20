@@ -1,0 +1,523 @@
+pageType: content
+background:
+  type: solid
+  color: $lt1
+elements:
+  - elementId: source-note
+    elementType: text
+    bounds: [380, 14, 544, 14]
+    content:
+      text: |-
+        <p style="text-align: right;">资料来源：mindieagent《Kimi K3 P/D Profiling 分析》（kimik3_A3_prefill / kimik3_A5_decode）</p>
+      color: "$gray"
+      fontSize: 8
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: false
+      align:
+        - right
+        - middle
+  - elementId: title
+    elementType: text
+    bounds: [44, 18, 880, 30]
+    content:
+      text: |-
+        <p style="text-align: left;">Kimi K3 推理负载分析：P/D 阶段 Attention / MoE 占比与 Bound 画像</p>
+      color: "$red"
+      fontSize: 18
+      bold: true
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: concl-label-bg
+    elementType: shape
+    bounds: [44, 56, 88, 62]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "$red"
+  - elementId: concl-label
+    elementType: text
+    bounds: [44, 56, 88, 62]
+    content:
+      text: |-
+        <p style="text-align: center;">分析</p><p style="text-align: center;">结论</p>
+      color: $lt1
+      fontSize: 14
+      bold: true
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: true
+      align:
+        - center
+        - middle
+  - elementId: concl-body-bg
+    elementType: shape
+    bounds: [140, 56, 784, 62]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#F2F2F2"
+  - elementId: concl-bullets
+    elementType: text
+    bounds: [154, 61, 756, 52]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.35;"><strong>P（Prefill）</strong>：瓶颈负载在 <strong>MoE</strong>（算子时间占比 50.6%，Attention 25.1%），瓶颈类型集中在<span style="color: #E45756;"><strong>通信</strong></span>——通信总量为计算的 1.16 倍，36.5% 阶段时间未被计算覆盖</li><li style="text-align: left; line-height: 1.35; margin-top: 4px;"><strong>D（Decode）</strong>：瓶颈负载在 <strong>MoE</strong>（47.9%，Attention 20.0%），瓶颈类型集中在<span style="color: #4C78A8;"><strong>计算 kernel</strong></span>——计算占阶段 89.4%、通信仅 15.2%，kernel 内访存与计算约各占一半</li></ul>
+      color: "$ink"
+      fontSize: 9
+      fontFamily: 微软雅黑, 微软雅黑
+      lineHeight: 1.35
+      wrap: true
+      align:
+        - left
+        - middle
+  - elementId: table-label
+    elementType: text
+    bounds: [44, 138, 430, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">P/D 阶段 Attention / MoE 占比与负载类型</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text1
+  - elementId: sum-table
+    elementType: table
+    bounds: [44, 158, 430, 120]
+    columnWidths:
+      - 0.15
+      - 0.30
+      - 0.31
+      - 0.24
+    rowHeights:
+      - 0.25
+      - 0.375
+      - 0.375
+    rows:
+      - - text: |-
+            <p style="text-align: left; line-height: 1.25;">阶段</p>
+        - text: |-
+            <p style="text-align: left; line-height: 1.25;">Attention（us / 占比）</p>
+        - text: |-
+            <p style="text-align: left; line-height: 1.25;">MoE（us / 占比）</p>
+        - text: |-
+            <p style="text-align: left; line-height: 1.25;">负载类型（计算/访存/通信）</p>
+      - - text: |-
+            <p style="text-align: left; line-height: 1.25;"><strong>P Prefill</strong></p>
+          color: "$ink"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left; line-height: 1.25;">2,005,161 / 25.1%</p>
+          color: "$ink"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left; line-height: 1.25;"><strong>4,043,506 / 50.6%</strong></p>
+          color: "$ink"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: ""
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+      - - text: |-
+            <p style="text-align: left; line-height: 1.25;"><strong>D Decode</strong></p>
+          color: "$ink"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left; line-height: 1.25;">483,203 / 20.0%</p>
+          color: "$ink"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: |-
+            <p style="text-align: left; line-height: 1.25;"><strong>1,159,345 / 47.9%</strong></p>
+          color: "$ink"
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+        - text: ""
+          border:
+            - null
+            - null
+            - style: solid
+              width: 0.75
+              color: "#D4D4D4"
+            - null
+    style: $table3
+  - elementId: bar-p-calc
+    elementType: shape
+    bounds: [375.8, 197.5, 24.2, 11]
+    shapeName: rect
+    fill: {type: solid, color: "$cCalc"}
+    border: {style: solid, width: 1, color: "#FFFFFF"}
+  - elementId: bar-p-mem
+    elementType: shape
+    bounds: [400, 197.5, 25.5, 11]
+    shapeName: rect
+    fill: {type: solid, color: "$cMem"}
+    border: {style: solid, width: 1, color: "#FFFFFF"}
+  - elementId: bar-p-comm
+    elementType: shape
+    bounds: [425.5, 197.5, 45.3, 11]
+    shapeName: rect
+    fill: {type: solid, color: "$cComm"}
+    border: {style: solid, width: 1, color: "#FFFFFF"}
+  - elementId: bar-pct-p
+    elementType: text
+    bounds: [370.8, 210.5, 103.2, 10]
+    content:
+      text: |-
+        <p style="text-align: center;"><span style="color: #4C78A8;">25.5</span><span> / </span><span style="color: #F2A93B;">26.8</span><span> / </span><span style="color: #E45756;">47.7</span><span>%</span></p>
+      color: "$gray"
+      fontSize: 6.5
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: bar-d-calc
+    elementType: shape
+    bounds: [375.8, 242.5, 44.3, 11]
+    shapeName: rect
+    fill: {type: solid, color: "$cCalc"}
+    border: {style: solid, width: 1, color: "#FFFFFF"}
+  - elementId: bar-d-mem
+    elementType: shape
+    bounds: [420.1, 242.5, 45, 11]
+    shapeName: rect
+    fill: {type: solid, color: "$cMem"}
+    border: {style: solid, width: 1, color: "#FFFFFF"}
+  - elementId: bar-d-comm
+    elementType: shape
+    bounds: [465.1, 242.5, 5.7, 11]
+    shapeName: rect
+    fill: {type: solid, color: "$cComm"}
+    border: {style: solid, width: 1, color: "#FFFFFF"}
+  - elementId: bar-pct-d
+    elementType: text
+    bounds: [370.8, 255.5, 103.2, 10]
+    content:
+      text: |-
+        <p style="text-align: center;"><span style="color: #4C78A8;">46.6</span><span> / </span><span style="color: #F2A93B;">47.4</span><span> / </span><span style="color: #E45756;">6.0</span><span>%</span></p>
+      color: "$gray"
+      fontSize: 6.5
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: bar-legend
+    elementType: text
+    bounds: [44, 288, 430, 13]
+    content:
+      text: |-
+        <p style="text-align: left;">负载类型 = Kernel 计数器归一：<span style="color: #4C78A8;">■ 计算</span><span>　</span><span style="color: #F2A93B;">■ 访存</span><span>　</span><span style="color: #E45756;">■ 通信</span>；P 通信主导（47.7%），D 计算 ≈ 访存</p>
+      color: "$ink"
+      fontSize: 8
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: false
+      align:
+        - left
+        - middle
+  - elementId: left-note-bg
+    elementType: shape
+    bounds: [44, 316, 430, 120]
+    shapeName: rect
+    fill:
+      type: solid
+      color: "#F2F2F2"
+  - elementId: left-note
+    elementType: text
+    bounds: [56, 324, 406, 104]
+    content:
+      text: |-
+        <ul><li style="text-align: left; line-height: 1.4;"><strong>Attention + MoE 是负载主体</strong>：合计占阶段算子时间 P 75.7%、D 67.9%；两阶段 MoE 占比均约为 Attention 的 2 倍</li><li style="text-align: left; line-height: 1.4; margin-top: 4px;"><strong>Attention 高度集中</strong>：P 集中于 ChunkKdaFwd（组内 66.5%），D 集中于 FlashMlaWithKvcache（组内 51.5%）</li><li style="text-align: left; line-height: 1.4; margin-top: 4px;"><strong>MoE 以矩阵乘 + 量化链路为主</strong>：P 前四项占 89.0%，D 前四项加 dispatch/combine 占 95.8%</li></ul>
+      color: "$ink"
+      fontSize: 8.5
+      fontFamily: 微软雅黑, 微软雅黑
+      lineHeight: 1.4
+      wrap: true
+      align:
+        - left
+        - middle
+  - elementId: pie-label
+    elementType: text
+    bounds: [500, 138, 300, 15]
+    content:
+      text: |-
+        <p style="text-align: left;">P/D 阶段算子构成与 Bound 类型（组内占比）</p>
+      wrap: false
+      align:
+        - left
+        - middle
+      style: $text1
+  - elementId: pie-legend
+    elementType: text
+    bounds: [760, 138, 164, 15]
+    content:
+      text: |-
+        <p style="text-align: right;"><span style="color: #4C78A8;">■ 计算</span><span> </span><span style="color: #F2A93B;">■ 访存</span><span> </span><span style="color: #E45756;">■ 通信</span><span> </span><span style="color: #C9C9C9;">■ 其他</span></p>
+      color: "$ink"
+      fontSize: 7.5
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: false
+      align:
+        - right
+        - middle
+  - elementId: pie-title-p-attn
+    elementType: text
+    bounds: [492, 160, 214, 13]
+    content:
+      text: |-
+        <p style="text-align: center;">P · Attention（25.1%）</p>
+      color: "$ink"
+      fontSize: 9
+      bold: true
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: pie-p-attn
+    elementType: chart
+    bounds: [492, 178, 130, 140]
+    data:
+      cols: [op, share]
+      rows:
+        - ["ChunkKdaFwd", 66.5]
+        - ["FusedInferAttnScore", 24.3]
+        - ["其他", 9.2]
+    series:
+      - type: pie
+        encode: {category: op, value: share}
+        innerRadius: 0.35
+        fill: ["$cCalc", "$cMem", "$cOther"]
+        border: {style: solid, width: 2, color: "#FFFFFF"}
+        dataLabels:
+          show: true
+          content: percentage
+          numberFormat: "0.0%"
+          fontSize: 6.5
+          color: "#262626"
+    legend: false
+    fontFamily: 微软雅黑, 微软雅黑
+  - elementId: pie-p-attn-legend
+    elementType: text
+    bounds: [616, 182, 90, 132]
+    content:
+      text: |-
+        <p style="line-height: 1.8;"><span style="color: #4C78A8;">■</span><span> ChunkKdaFwd</span></p><p style="line-height: 1.8;"><span style="color: #F2A93B;">■</span><span> FusedInferAttnScore</span></p><p style="line-height: 1.8;"><span style="color: #C9C9C9;">■</span><span> 其他</span></p>
+      color: "$ink"
+      fontSize: 6
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: true
+      align:
+        - left
+        - middle
+  - elementId: pie-title-p-moe
+    elementType: text
+    bounds: [710, 160, 214, 13]
+    content:
+      text: |-
+        <p style="text-align: center;">P · MoE（50.6%）</p>
+      color: "$ink"
+      fontSize: 9
+      bold: true
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: pie-p-moe
+    elementType: chart
+    bounds: [710, 178, 130, 140]
+    data:
+      cols: [op, share]
+      rows:
+        - ["GroupedMatmul", 34.5]
+        - ["QuantBatchMatmulV3", 18.6]
+        - ["DequantSituQuant", 19.4]
+        - ["DynamicQuant", 16.5]
+        - ["其他", 11.0]
+    series:
+      - type: pie
+        encode: {category: op, value: share}
+        innerRadius: 0.35
+        fill: ["$cCalc", "$cCalc", "$cMem", "$cMem", "$cOther"]
+        border: {style: solid, width: 2, color: "#FFFFFF"}
+        dataLabels:
+          show: true
+          content: percentage
+          numberFormat: "0.0%"
+          fontSize: 6.5
+          color: "#262626"
+    legend: false
+    fontFamily: 微软雅黑, 微软雅黑
+  - elementId: pie-p-moe-legend
+    elementType: text
+    bounds: [834, 182, 90, 132]
+    content:
+      text: |-
+        <p style="line-height: 1.8;"><span style="color: #4C78A8;">■</span><span> GroupedMatmul</span></p><p style="line-height: 1.8;"><span style="color: #4C78A8;">■</span><span> QuantBatchMatmulV3</span></p><p style="line-height: 1.8;"><span style="color: #F2A93B;">■</span><span> DequantSituQuant</span></p><p style="line-height: 1.8;"><span style="color: #F2A93B;">■</span><span> DynamicQuant</span></p><p style="line-height: 1.8;"><span style="color: #C9C9C9;">■</span><span> 其他</span></p>
+      color: "$ink"
+      fontSize: 6
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: true
+      align:
+        - left
+        - middle
+  - elementId: pie-title-d-attn
+    elementType: text
+    bounds: [492, 330, 214, 13]
+    content:
+      text: |-
+        <p style="text-align: center;">D · Attention（20.0%）</p>
+      color: "$ink"
+      fontSize: 9
+      bold: true
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: pie-d-attn
+    elementType: chart
+    bounds: [492, 348, 130, 140]
+    data:
+      cols: [op, share]
+      rows:
+        - ["FlashMlaWithKvcache", 51.5]
+        - ["AttnResFwdFused", 13.4]
+        - ["MlaPrologV3", 7.9]
+        - ["RecurrentKda", 14.7]
+        - ["其他", 12.5]
+    series:
+      - type: pie
+        encode: {category: op, value: share}
+        innerRadius: 0.35
+        fill: ["$cMem", "$cMem", "$cMem", "$cCalc", "$cOther"]
+        border: {style: solid, width: 2, color: "#FFFFFF"}
+        dataLabels:
+          show: true
+          content: percentage
+          numberFormat: "0.0%"
+          fontSize: 6.5
+          color: "#262626"
+    legend: false
+    fontFamily: 微软雅黑, 微软雅黑
+  - elementId: pie-d-attn-legend
+    elementType: text
+    bounds: [616, 352, 90, 132]
+    content:
+      text: |-
+        <p style="line-height: 1.8;"><span style="color: #F2A93B;">■</span><span> FlashMlaWithKvcache</span></p><p style="line-height: 1.8;"><span style="color: #F2A93B;">■</span><span> AttnResFwdFused</span></p><p style="line-height: 1.8;"><span style="color: #F2A93B;">■</span><span> MlaPrologV3</span></p><p style="line-height: 1.8;"><span style="color: #4C78A8;">■</span><span> RecurrentKda</span></p><p style="line-height: 1.8;"><span style="color: #C9C9C9;">■</span><span> 其他</span></p>
+      color: "$ink"
+      fontSize: 6
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: true
+      align:
+        - left
+        - middle
+  - elementId: pie-title-d-moe
+    elementType: text
+    bounds: [710, 330, 214, 13]
+    content:
+      text: |-
+        <p style="text-align: center;">D · MoE（47.9%）</p>
+      color: "$ink"
+      fontSize: 9
+      bold: true
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: false
+      align:
+        - center
+        - middle
+  - elementId: pie-d-moe
+    elementType: chart
+    bounds: [710, 348, 130, 140]
+    data:
+      cols: [op, share]
+      rows:
+        - ["GroupedMatmulSituQuant", 35.0]
+        - ["GroupedMatmul", 18.6]
+        - ["QuantBatchMatmulV4", 14.3]
+        - ["QuantBatchMatmulV3", 13.6]
+        - ["Dispatch/Combine", 14.3]
+        - ["其他", 4.2]
+    series:
+      - type: pie
+        encode: {category: op, value: share}
+        innerRadius: 0.35
+        fill: ["$cCalc", "$cCalc", "$cCalc", "$cCalc", "$cComm", "$cOther"]
+        border: {style: solid, width: 2, color: "#FFFFFF"}
+        dataLabels:
+          show: true
+          content: percentage
+          numberFormat: "0.0%"
+          fontSize: 6.5
+          color: "#262626"
+    legend: false
+    fontFamily: 微软雅黑, 微软雅黑
+  - elementId: pie-d-moe-legend
+    elementType: text
+    bounds: [834, 352, 90, 132]
+    content:
+      text: |-
+        <p style="line-height: 1.8;"><span style="color: #4C78A8;">■</span><span> GroupedMatmulSituQuant</span></p><p style="line-height: 1.8;"><span style="color: #4C78A8;">■</span><span> GroupedMatmul</span></p><p style="line-height: 1.8;"><span style="color: #4C78A8;">■</span><span> QuantBatchMatmulV4</span></p><p style="line-height: 1.8;"><span style="color: #4C78A8;">■</span><span> QuantBatchMatmulV3</span></p><p style="line-height: 1.8;"><span style="color: #E45756;">■</span><span> Dispatch/Combine</span></p><p style="line-height: 1.8;"><span style="color: #C9C9C9;">■</span><span> 其他</span></p>
+      color: "$ink"
+      fontSize: 6
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: true
+      align:
+        - left
+        - middle
+  - elementId: footnote
+    elementType: text
+    bounds: [44, 520, 880, 14]
+    content:
+      text: |-
+        <p style="text-align: left;">注：算子占比为 op_statistic Total Time 归一（存在并行重叠，用于负载构成排序而非串行时延）；负载类型为 kernel_details 计数器归一；Bound 按算子主导资源归类：矩阵乘→计算，量化/搬运/Cache 访问→访存，dispatch/combine→通信。</p>
+      color: "$gray"
+      fontSize: 7.5
+      fontFamily: 微软雅黑, 微软雅黑
+      wrap: false
+      align:
+        - left
+        - middle

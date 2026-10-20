@@ -1,463 +1,621 @@
-# vLLM-Ascend 中 Kimi K3 投机推理与 KDA 状态回滚分析
+# Kimi K3 投机推理：技术报告、PR #17664 与 PR #19087
 
-## 结论先行
+## 结论
 
-当前 vLLM-Ascend 已经把 Kimi K3 的 MTP/投机验证路径接到了 `fla_npu` 的 `recurrent_kda` 算子。PR #17664 已合并，主要工作是用 `fla_npu.ops.ascendc` 替换仓库内置的 KDA AscendC 算子，同时保留 Kimi K3/GLM5Next 原有的 gate、beta、V-first state 和 speculative metadata 语义。
+| 方案 | 核心机制 | recurrent state 处理 | 定位 |
+|---|---|---|---|
+| 技术报告 | RecoverSSM / projected-input replay | 保存可重建状态的较小记录，从 accepted checkpoint 重放 | 目标方案 |
+| PR #17664 | fla_npu recurrent KDA | 每个 speculative position 使用 state slot | 算子替换 + state-slot rollback |
+| PR #19087 | Ascend Triton RecoverSSM verify/commit | 保存 correction vectors、key/raw-gate records，最后提交 accepted 状态 | 技术报告方案的实验性原型 |
 
-这条路径已经具备实际的 KDA 投机回滚能力：验证阶段得到每个请求的 `num_accepted_tokens`，再利用 `spec_state_indices` 从 state pool 中定位已接受前缀对应的状态，重新执行当前短投机窗口，并把每个 token 的新状态写回指定 slot。
+PR #19087 的主要增益不是改变 KDA 数学公式，而是改变状态保存方式：从每个位置保存完整 recurrent state，变成保存可重建状态的压缩记录。它已经接近技术报告的算法思想，但仍是 Draft/V1 Archive 原型，不是完整生产级 fused replay 实现。
 
-需要区分两种“回滚”含义：
+## 第一章：投机回滚
 
-1. **当前 vLLM-Ascend 的实现**：显式维护每个 speculative token 的 recurrent state slot，验证后从 accepted token 对应的 state 恢复，再重算窗口。
-2. **Kimi K3 技术报告中的理想优化**：缓存较小的 projected inputs，在片上 replay accepted tokens，避免保存每个 draft position 的完整大状态。
+本章统一说明技术报告、PR #17664、PR #19087 的回滚机制、状态生命周期、显存/访存收益和 Kimi K3 的回滚架构。
 
-当前代码已经完成第一种机制，但从调用方和 `recurrent_kda` 接口看，不能证明它已经实现了报告中第二种“只缓存 projected inputs”的优化。
+### 三种投机回滚方案总览
 
-## 当前代码状态
+三种方案的共同输入都是目标模型对投机窗口产生的 KDA 投影输入；差别在于验证阶段如何保存中间状态，以及 rejection sampling 后如何恢复 accepted prefix。
 
-### PR #17664
+```mermaid
+flowchart LR
+    A[Draft tokens] --> B[KDA input projection<br/>q k v gate beta]
+    B --> C[Target verification]
+    C --> D{Rejection sampling}
 
-PR [#17664](https://github.com/vllm-project/vllm-ascend/pull/17664) 已于 2026-10-04 合并。PR 的目标是：
+    C --> R1[技术报告<br/>projected-input replay]
+    C --> R2[PR #17664<br/>state-slot rollback]
+    C --> R3[PR #19087<br/>RecoverSSM]
 
-- 直接从 `fla_npu.ops.ascendc` 导入 `chunk_kda_fwd` 和 `recurrent_kda`；
-- 删除 vLLM-Ascend 仓库内置的 chunk/recurrent KDA AscendC 实现、Torch schema 和构建入口；
-- 保留原有 gate/beta 处理、V-first state 和 speculative decoding metadata；
-- 调整 recurrent 算子的参数和返回值。
+    R1 --> O1[accepted checkpoint +<br/>small replay records]
+    O1 --> P1[从 S_accepted 片上重放]
+    P1 --> W1[写回 accepted / bonus state]
 
-PR 的测试包括 KDA recurrent 集成测试，并报告了 A5 上 recurrent KDA 算子平均延迟从 121.810 微秒降至 94.639 微秒，下降 22.31%；A3 上则从 81.573 微秒变为 83.999 微秒，增加 2.97%。这些是算子级 profile，不等于完整请求的投机推理加速。
+    R2 --> O2[每个 position 一个<br/>完整 recurrent state slot]
+    O2 --> P2[num_accepted_tokens 选择 slot]
+    P2 --> W2[保留 accepted slot<br/>回收 rejected slots]
 
-主要代码位置：
-
-- [公共 KDA wrapper](C:\Users\ASUS\Desktop\kimi_k3\vllm-ascend\vllm_ascend\ops\kda.py)
-- [GLM5Next KDA 适配层](C:\Users\ASUS\Desktop\kimi_k3\vllm-ascend\vllm_ascend\models\glm5next\ops\kda.py)
-- [GLM5Next/Kimi 风格 KDA 调用方](C:\Users\ASUS\Desktop\kimi_k3\vllm-ascend\vllm_ascend\models\glm5next\kda.py)
-- [fla_npu recurrent KDA README](C:\Users\ASUS\Desktop\kimi_k3\kernels\flash-linear-attention-npu\fla\ops\ascendc\kda\recurrent_kda\README.md)
-
-## 投机推理的完整调用路径
-
-Kimi K3 的 KDA 层包含短卷积和 recurrent KDA 两个有状态阶段。因此投机回滚不是只恢复一个矩阵，而是要同时处理：
-
-```text
-MTP/草稿 token
-      ↓
-投影 q|k|v、gate、beta
-      ↓
-spec causal-conv
-      │ 依据 num_accepted_tokens 恢复/滑动卷积状态
-      ↓
-得到 q_spec、k_spec、v_spec
-      ↓
-recurrent_kda
-      │ 依据 num_accepted_tokens 选择 KDA 起始 state
-      │ 依据 spec_state_indices 为每个 token 选择 state slot
-      │ 顺序执行 KDA recurrence 并写回状态
-      ↓
-把 spec 输出写回原 token 位置
+    R3 --> O3[checkpoint + correction/key/gate records]
+    O3 --> P3[verify 不改 checkpoint]
+    P3 --> P4[commit 反向累积 accepted prefix]
+    P4 --> W3[一次性写回 accepted state]
 ```
 
-在 [KDA caller](C:\Users\ASUS\Desktop\kimi_k3\vllm-ascend\vllm_ascend\models\glm5next\kda.py) 中，投机路径首先读取：
+### 方案 A：技术报告 projected-input replay
 
-- `spec_query_start_loc`：每条投机序列在 packed token buffer 中的边界；
-- `spec_state_indices_tensor`：每条序列的 state slot 表；
-- `spec_token_indx`：投机 token 在原始输出 buffer 中的位置；
-- `num_accepted_tokens`：本轮验证后每条序列接受的 token 数。
-
-投机 token 与普通 decode token 被分开处理。投机分支使用 `causal_conv1d(..., num_accepted_tokens=...)`，然后调用：
-
-```python
-spec_output = recurrent_kda(
-    rearrange(q_spec),
-    rearrange(k_spec),
-    rearrange(v_spec),
-    g1_spec,
-    beta_spec,
-    recurrent_state,
-    spec_query_start_loc[: num_spec_decodes + 1],
-    spec_state_indices_tensor,
-    self.A_log,
-    self.dt_bias,
-    lower_bound,
-    num_accepted_tokens,
-)
+```mermaid
+flowchart TD
+    A[accepted prefix] --> B[checkpoint S_a]
+    D[draft positions a+1 ... a+K] --> E[projected-input records P_t]
+    B --> F[replay kernel]
+    E --> F
+    F --> G[重建 S_a+1 ... S_a+K<br/>并生成验证输出]
+    G --> H[rejection sampler]
+    H --> I{accepted boundary}
+    I -->|accepted / bonus| J[写回最终状态]
+    I -->|rejected suffix| K[丢弃 records 和临时状态]
 ```
 
-最终通过 `index_copy_` 将投机输出放回原 token 位置。这样可以把投机 token 和非投机 token 混合在同一轮调度中，而不要求输出 buffer 按投机序列重新排列。
+核心特点是只保留一个 accepted-prefix checkpoint 和小型 per-token records，不保存每个 draft position 的完整 recurrent state。技术报告还设想将短卷积、输入归一化、gate、recurrent KDA 和输出归一化融合到同一个 replay kernel。
 
-## 状态回滚解决的问题
+### 方案 B：PR #17664 state-slot rollback
 
-### KDA 的根本问题
+```mermaid
+flowchart TD
+    A[spec q/k/v/gate/beta] --> B[causal-conv rollback]
+    B --> C[fla_npu.recurrent_kda]
+    S[state pool] --> C
+    M[num_accepted_tokens<br/>spec_state_indices] --> C
+    C --> D[state slot 0: S_accepted]
+    C --> E[state slot 1: S_1]
+    C --> F[state slot 2: S_2]
+    C --> G[state slot K: S_K]
+    D --> H[rejection sampler]
+    E --> H
+    F --> H
+    G --> H
+    H --> I[选择 accepted slot]
+    I --> J[下一轮从 accepted slot 继续]
+    H --> K[rejected slots 回收]
+```
 
-KDA 通过递推状态表示历史信息：
+该方案将每个 speculative position 的完整状态写入独立 slot。它已经形成可用的功能闭环，但 state pool 容量和 state writeback 随窗口长度增加。
+
+### 方案 C：PR #19087 RecoverSSM verify/commit
+
+```mermaid
+flowchart TD
+    A[accepted checkpoint S_a] --> B[kda_recoverssm_verify]
+    D[draft q/k/v/gate/beta] --> B
+    B --> E[验证输出]
+    B --> F[correction_cache]
+    B --> G[kg_cache<br/>key + raw gate]
+    B -. checkpoint unchanged .-> A
+    E --> H[rejection sampler]
+    H --> I[accepted boundary a']
+    F --> J[kda_recoverssm_commit]
+    G --> J
+    A --> J
+    I --> J
+    J --> K[反向累积 accepted prefix]
+    K --> L[一次性更新 checkpoint S_a']
+    I --> M[rejected suffix records 丢弃]
+```
+
+该方案把验证和提交分开：verify 阶段不污染主 checkpoint；确定 accepted boundary 后，commit 只重建并写回 accepted/bonus 状态。
+
+### 三种方案的状态生命周期对比
+
+```mermaid
+sequenceDiagram
+    participant D as Draft
+    participant V as Target Verify
+    participant C as State/Record Cache
+    participant S as Sampler
+    participant N as Next Decode
+
+    rect rgb(235,245,255)
+    Note over D,N: 技术报告：projected-input replay
+    D->>V: draft projected inputs
+    V->>C: checkpoint + small records
+    V->>S: outputs
+    S->>C: accepted boundary
+    C->>N: replay accepted/bonus and write state
+    end
+
+    rect rgb(235,255,240)
+    Note over D,N: PR #17664：state-slot rollback
+    D->>V: q/k/v/gate/beta
+    V->>C: write full S_1 ... S_K slots
+    V->>S: outputs
+    S->>C: choose S_accepted slot
+    C->>N: reuse accepted slot
+    end
+
+    rect rgb(255,245,235)
+    Note over D,N: PR #19087：RecoverSSM
+    D->>V: draft inputs
+    V->>C: records, checkpoint unchanged
+    V->>S: outputs
+    S->>C: accepted boundary
+    C->>C: verify records -> commit replay
+    C->>N: write accepted checkpoint
+    end
+```
+
+### 技术报告方案
+
+技术报告中的 KDA 递推可写为：
 
 \[
-S_t = F(S_{t-1}, q_t, k_t, v_t, g_t, \beta_t)
-\]
-
-普通 decode 时，状态可以原位更新。但在投机解码中，草稿模型可能一次给出多个 token，目标模型验证后只接受前缀：
-
-```text
-草稿 token:       d1 d2 d3 d4 d5
-验证结果:         ✓  ✓  ✓  ✗  -
-最终接受前缀:      d1 d2 d3
-```
-
-如果 KDA 已经顺序执行了 `d1...d5`，状态会停在 `S5`；目标序列真正需要的是 `S3`。传统的原位更新无法通过简单地删除末尾 token 来恢复 `S3`。
-
-### 回滚机制解决的三个问题
-
-1. **状态越过 accepted prefix**：拒绝 token 不应污染后续 KDA 状态。
-2. **短卷积状态也会越过 accepted prefix**：KDA 前的 q/k/v causal convolution 同样依赖历史，必须和 recurrent state 使用同一组 accepted metadata。
-3. **批量调度中的状态归属**：不同请求、不同 speculative step 不能覆盖彼此的状态，因此需要显式 slot 表和 state pool。
-
-## 当前实现的状态恢复机制
-
-### `num_accepted_tokens`
-
-`num_accepted_tokens` 是每条投机序列的 accepted prefix 长度。GLM5Next 适配层会将它传给 causal convolution 和 `recurrent_kda`。
-
-在 `recurrent_kda` kernel 中，`ResolveInitialStateSlot()` 使用 accepted 数量计算起始 token 位置，随后从 `ssm_state_indices` 取得对应 state slot。其语义是：从已接受前缀末端的状态开始处理当前投机窗口。
-
-### `ssm_state_indices`
-
-`ssm_state_indices` 是 state pool 的索引表：
-
-```text
-序列 i:  [slot_before, slot_1, slot_2, ..., slot_m]
-                         ↑
-                 每个 speculative token 的输出状态
-```
-
-kernel 对每个 token 执行 KDA recurrence 后，把结果写回该 token 对应的 slot。这样拒绝的草稿状态可以留在独立 slot 中，不会直接覆盖已接受序列的主状态；下一轮调度只需选择正确的 accepted slot。
-
-### 状态写回
-
-`recurrent_kda` 以 `inplace_final_state=True` 和 `state_v_first=True` 调用。它不是返回一个独立的最终状态再由 Python 复制回 cache，而是直接更新传入的 state pool。输出和状态写回分别通过 recurrent kernel 的 attention output 与 `CopyOutState` 路径完成。
-
-## 当前实现与技术报告方案的差异
-
-技术报告中的优化思路是：
-
-```text
-不保存每个 draft position 的完整 S_t
-只缓存 projected inputs
-验证后从 S_accepted 开始片上 replay
-写回 verified/bonus token 状态
-```
-
-当前 vLLM-Ascend 代码体现的是：
-
-```text
-显式 state pool
-每个 speculative token 一个 state slot
-accepted 数量定位起始 slot
-直接读取 q/k/v/g/beta 并顺序重算
-把每个 token 状态写回对应 slot
-```
-
-因此，当前实现已经具备**功能上的状态回滚**，但其状态内存策略更接近“多状态槽快照方案”。`recurrent_kda` 的接口没有 `projected_inputs` 专用缓存参数，也没有报告中所说的 replay-only 分支；q/k/v/g/beta 仍由调用方作为当前投机窗口的完整输入传入。
-
-这一区分很重要：
-
-- `num_accepted_tokens + state_indices` 证明了它支持 MTP rejection rollback；
-- 但不能据此声称已经获得技术报告中“避免每个 draft state 快照”的全部内存流量收益。
-
-## 对系统性能的收益
-
-### 已经可以确认的收益
-
-当前状态槽方案的主要收益是正确性和调度效率：
-
-- 拒绝 token 不会污染已接受前缀的 KDA state；
-- 不需要回滚整个长上下文，只需处理最多几个 speculative token；
-- 同一 recurrent kernel 可以处理短窗口，接口限制每段 recurrent 序列长度不超过 8；
-- speculative 与普通 decode 可以在同一批次中分流执行；
-- state pool 允许不同请求使用不同 slot，减少 Python 侧的显式 gather/scatter。
-
-PR #17664 的 A5 profile 显示，替换为 fla_npu 后 recurrent KDA 算子平均延迟下降约 22.3%。这说明算子实现本身有收益，但不能把这 22.3% 直接等同于投机回滚收益，也不能推导出完整请求吞吐提升。
-
-### 理论上的状态流量收益
-
-设：
-
-- (H_v)：value head 数；
-- (K,V)：KDA state 的两个矩阵维度；
-- (d_s)：state dtype 字节数；
-- (d_q,d_g,d_b)：q/k/v、gate、beta 的每元素字节数。
-
-一个完整 KDA state 的大小近似为：
-
-\[
-B_S = H_v \times V \times K \times d_s
-\]
-
-一个 token 的 projected inputs 大小近似为：
-
-\[
-B_P = H_qK d_q + H_qK d_q + H_vV d_q + H_vK d_g + H_v d_b
-\]
-
-以常见的 (K=V=128)、BF16 q/k/v、FP32 gate/beta、FP32 state、且 (H_q=H_v=H) 为例：
-
-\[
-B_S \approx 4H \times 128^2 = 65536H\text{ bytes}
+S_t=M_tS_{t-1}+\beta_t k_t v_t^\top,
+\qquad
+M_t=(I-\beta_t k_t k_t^\top)\operatorname{Diag}(\alpha_t),
 \]
 
 \[
-B_P \approx 2H(128+128+128)+4H(128+1)=1280H\text{ bytes}
+\tilde{o}_t=S_t^\top q_t.
+\]
+
+给定 accepted prefix 末端状态 S_a，后续状态完全由 draft token 的投影输入决定：
+
+\[
+S_{a+i}=F(S_{a+i-1},P_{a+i}).
+\]
+
+其中 P_t 是生成 KDA 递推所需的 key/value/gate/beta 等 per-token 记录。技术报告的 replay 流程是：
+
+    保留 accepted prefix checkpoint S_a
+    缓存 draft token 的小型 projected-input / replay records
+    从 S_a 片上重放验证链
+    只写回 verified token 和 bonus token 的状态
+
+报告还设想将短卷积、输入归一化、gate、KDA recurrence 和输出归一化放入同一 fused kernel。不能仅凭 PR #19087 的 verify/commit primitive 认定这个 fused kernel 已全部实现。
+
+### PR #17664：state-slot rollback
+
+PR [#17664](https://github.com/vllm-project/vllm-ascend/pull/17664) 于 2026-10-04 合并。它把 Kimi K3/GLM5Next 使用的 chunk_kda_fwd、recurrent_kda 切换到 fla_npu.ops.ascendc，保留 gate/beta、V-first state 和 speculative metadata。
+
+它依赖 num_accepted_tokens、spec_state_indices、spec_query_start_loc，且 causal-conv 与 recurrent KDA 共用 accepted prefix 语义。
+
+工作方式近似为：
+
+    slot 0：accepted prefix 末端状态
+    slot 1：第一个 speculative position 的状态
+    slot 2：第二个 speculative position 的状态
+    ...
+
+验证后选择 accepted slot，拒绝 token 的状态留在独立 slot 中。因此 17664 是功能正确的状态槽快照恢复方案，解决了状态污染，但仍为 speculative positions 保留完整大 state。
+
+PR 报告 A5 recurrent KDA 121.810 -> 94.639 微秒（-22.31%），A3 81.573 -> 83.999 微秒（+2.97%）；这是算子/集成 profile，不等于投机服务吞吐提升。
+
+### PR #19087：RecoverSSM verify/commit
+
+PR [#19087](https://github.com/vllm-project/vllm-ascend/pull/19087) 增加两个 primitive。
+
+kda_recoverssm_verify：读取 accepted prefix checkpoint，沿验证链前向执行 KDA，生成输出，保存 FP32 correction vectors 和 activation-dtype 的 key/raw-gate records，并保持原 checkpoint 不变。
+
+kda_recoverssm_commit：得到 rejection sampling 的 accepted 边界，从最后接受位置反向累积 accepted prefix，一次性更新原始 checkpoint，不读取 rejected suffix records。
+
+其记录结构为：
+
+    checkpoint_state[blocks, heads, value_dim, key_dim]
+    correction_cache[blocks, heads, capacity, value_dim]
+    kg_cache[blocks, heads, capacity, 2 * key_dim]
+
+它不是简单复制 q/k/v/g/beta，而是保存足以重建 accepted state 的压缩递推记录。
+
+### 19087 相较 17664 的增益
+
+1. 状态容量从每个 speculative position 的完整矩阵变成一个 checkpoint 加小型 records。
+2. 验证期间不修改主 checkpoint，rejected suffix 只是临时 records。
+3. 显式拆成 verify/commit，并通过记录重建 accepted 状态，更接近报告的 replay 思路。
+4. 代价是额外计算和搬运。PR 自己的 batch=32 微基准中，RecoverSSM verify+commit 约 121 微秒，而 AscendC verify 约 51--54 微秒。当前增益主要是状态容量和流量潜力，不是已证明的端到端 TPOT 加速。
+
+### K=5、6 个验证位置的显存核算
+
+只计算 KDA recurrent state 和 RecoverSSM records，不计算 causal-conv、attention KV、padding、allocator alignment、scratch 之外激活、多层多头复制。按每个 local head，假设 head_dim=128、FP32 state、BF16 records。
+
+一个 recurrent state：
+
+\[
+B_S=128\times128\times4=65{,}536\text{ bytes}=64\text{ KiB}.
+\]
+
+PR #17664 对 6 个位置：
+
+\[
+B_{17664}=6B_S=384\text{ KiB}.
+\]
+
+这与 PR #19087 描述中的 FP32 baseline 一致。
+
+PR #19087 对相同配置给出的 logical RecoverSSM records：
+
+\[
+B_{19087}=70\text{ KiB per head}.
 \]
 
 因此：
 
 \[
-\frac{B_S}{B_P} \approx 51.2
+\Delta B=384-70=314\text{ KiB per head},
 \]
-
-如果把传统 snapshot 方案的状态读写粗略按一次写入加一次恢复读取计算，则仅从状态搬运角度看，projected-input replay 的潜在流量可以降低约：
 
 \[
-1 - \frac{B_P}{2B_S} \approx 99.0\%
+\text{节省比例}=1-70/384=81.77\%,
+\qquad
+70/384=18.23\%.
 \]
 
-这只是局部内存流量上界，不能直接转化为端到端 99% 加速。实际收益还会受到以下部分限制：
+单 local head 的逻辑 recurrent 存储从 384 KiB 降到约 70 KiB。
 
-- `S @ k`、`outer(delta,k)`、`S @ q` 的计算量；
-- gate/beta、短卷积和输出写回；
-- NPU kernel 启动和同步；
-- state pool 的 slot 写回；
-- batch 中非投机请求的比例。
+70 KiB 不能用简单的 6 × (key + gate) 复算：correction_cache 按 value dimension 保存 correction vectors，kg_cache 按 2 * key_dim 保存 key/raw-gate，实际 capacity 和记录布局也参与计算。该数字是 PR 给出的完整 logical tensor-size 结果；它不代表 allocator 会立即缩容，因为 19087 保留 native cache allocation 并增加 scratch。
 
-如果 state 使用 BF16，上述 state/input 比例约减半，仍然约为 25.6 倍，说明 state snapshot 的内存压力通常远大于 projected-input 缓存。
+### 访存核算
 
-### 投机吞吐的理论估计
-
-设每轮草稿窗口长度为 (m)，平均接受 token 数为 (a)，bonus token 使每轮平均产出 (a+1) 个 token；设：
-
-- (C_t)：目标模型普通单 token decode 成本；
-- (C_d)：草稿模型生成一个 token 的成本；
-- (C_v(m))：目标模型验证整个投机窗口的成本；
-- (C_r(a,m))：回滚/状态重算额外成本。
-
-普通 decode 每产出一个 token 的成本约为 (C_t)。投机路径每轮的平均成本约为：
+显存容量和实际 NPU DRAM traffic 不是同一个指标。采用每条记录一次写入、一次读取的对称逻辑模型：
 
 \[
-C_{spec}=mC_d+C_v(m)+C_r(a,m)
+T_{17664}=2\times384=768\text{ KiB},
 \]
-
-对应的理想吞吐倍率为：
 
 \[
-Speedup \approx \frac{(a+1)C_t}{mC_d+C_v(m)+C_r(a,m)}
+T_{19087}=2\times70=140\text{ KiB},
 \]
-
-这个公式说明：
-
-- 接受率越高，(a) 越大，投机收益越高；
-- 草稿模型越便宜，(C_d) 越小，收益越高；
-- KDA 回滚越接近短窗口重算，(C_r) 越小，收益越高；
-- 如果接受率低或 state snapshot 搬运很重，投机可能退化甚至变慢。
-
-举一个明确标注假设的例子：若 (m=4)、平均接受 (a=3)、草稿模型单 token 成本为 (0.25C_t)、验证成本为 (1.0C_t)、回滚成本为 (0.25C_t)，则：
 
 \[
-Speedup \approx \frac{4C_t}{4\times0.25C_t+1.0C_t+0.25C_t}
- = \frac{4}{2.25}\approx1.78\times
+\Delta T=768-140=628\text{ KiB},
+\qquad
+\text{估算节省}=81.77\%.
 \]
 
-这只是模型化估计，不是当前 vLLM-Ascend 的实测结果。真实结果需要同时测量接受率、draft/target 比例、state slot 读写、conv 回滚和混合 batch 调度。
+这只是 record traffic 的模型化估算。真实流量会受 accepted slot 是否只读一个 state、19087 的 checkpoint/records/scratch 读写、tile/padding、连续性、cache 命中和 kernel 融合影响。因此 81.77% 不是实测 DRAM 降幅，需要采集 NPU memory read/write bytes 和 state-pool transaction counters 才能确认。
 
-## 当前实现的限制与风险点
+### 限制
 
-1. **短窗口限制**：`recurrent_kda` 当前每条 recurrent 序列最多处理 8 个 token，适合 MTP decode，不适合直接承担长序列 recurrent prefill。
-2. **state slot 依赖 metadata 正确性**：`spec_state_indices_tensor`、`spec_query_start_loc` 和 `num_accepted_tokens` 必须来自同一轮调度；任何错位都会把一个请求的 state 读给另一个请求。
-3. **状态内存仍可能较大**：当前方案保留多个 speculative state slot，尚未体现报告中 projected-input replay 的完整节省。
-4. **causal-conv 与 recurrent KDA 必须一致回滚**：只恢复 KDA state 而不恢复 q/k/v 短卷积状态，会产生不一致的输入投影。
-5. **算子 profile 不等于服务吞吐**：PR 中 A5 的 recurrent 算子下降 22.31%，但完整请求延迟还受 MoE、MLA、调度、通信和 draft acceptance 影响。
-6. **A3/A5 结果不同**：PR 报告 A3 recurrent 算子平均延迟略有上升，因此不能假设所有 Ascend 平台都获得相同收益。
+PR #19087 是 Draft/V1 Archive，默认关闭；要求 MRV1、MTP、eager、同步调度、PP=1、DP=1；不支持 graph/async、prefix caching、KV transfer；保留原生 state allocation；当前 verify+commit 慢于 AscendC baseline；没有把报告所述全部阶段融合成生产级 replay kernel。
 
-## 建议的验证矩阵
+PR #17664 已合并，可作为当前 KDA recurrent 执行路径，但仍是 state-slot rollback，state traffic 随 speculative position 数增加。
 
-要确认完整的 Kimi K3 投机回滚收益，至少应记录以下指标：
+### 最终判断
 
-| 指标 | 目的 |
-|---|---|
-| 平均 draft window 长度 (m) | 确认实际投机窗口规模 |
-| 平均 accepted token 数 (a) | 估计投机有效率 |
-| 接受率 (a/m) | 判断回滚是否频繁 |
-| `recurrent_kda` kernel latency | 测量算子本身 |
-| causal-conv latency | 测量另一段有状态回滚 |
-| state pool 读写字节数 | 判断 snapshot 成本 |
-| 每 token 端到端延迟 | 计算真实吞吐收益 |
-| TTFT/TPOT | 区分首 token 和持续生成影响 |
-| 混合 batch 中 speculative/non-spec 比例 | 判断调度干扰 |
-| 回滚前后 state 一致性 | 验证正确性 |
+    K=5，验证窗口=6，head_dim=128，按每个 local head：
+    PR #17664 state-slot：384 KiB
+    PR #19087 RecoverSSM：70 KiB
+    逻辑显存减少：314 KiB
+    逻辑显存节省：81.77%
 
-建议做三组基线：
+    对称一次读 + 一次写模型：
+    PR #17664：768 KiB
+    PR #19087：140 KiB
+    逻辑 record traffic 减少：628 KiB
+    估算节省：81.77%
 
-1. 普通单 token decode；
-2. 当前 state-slot rollback；
-3. 理想 projected-input replay 或等价的低状态流量实现。
+PR #19087 的本质增益是：把 KDA speculative rollback 从“保存每个位置的完整 recurrent state”推进到“保存可重建状态的压缩记录，并在 accepted boundary 之后 commit”。它体现了技术报告 RecoverSSM 的核心思想，但距离完整 fused projected-input replay 和生产级 serving integration 仍有差距。
 
-只有第 2 组与第 3 组的对比，才能判断技术报告中“减少状态 traffic”的优化是否已经在当前 vLLM-Ascend 集成中实现。
+### 增益计算的详细解释：不是普通 attention KV Cache
 
-## 最终判断
+这里的“节省 KV Cache”需要准确表述为：**节省 KDA speculative rollback 所需的 recurrent state cache**。它不是普通 softmax/MLA attention 的 token-level KV Cache。PR #19087 的逻辑容量数字也排除了 attention KV、causal-conv state、padding 和 allocator alignment。
 
-当前 vLLM-Ascend 的 Kimi K3 投机推理已经不是“只有接口预留”：`num_accepted_tokens`、causal-conv rollback、`spec_state_indices`、state pool 和 `recurrent_kda` 调用形成了完整的 MTP 状态恢复链路。
+### PR #17664 的 state-slot 容量
 
-它解决的是 KDA 原位递推状态无法在拒绝草稿后直接截断的问题，收益是保证状态正确性、把回滚范围限制在短 speculative window，并利用 fused recurrent kernel 降低执行开销。
+KDA 每个 recurrent state 是一个矩阵：
 
-但从实现细节看，当前路径更接近**显式 state-slot 快照恢复方案**。技术报告中的**projected-input replay 方案**可以作为后续优化方向：它有望把状态相关内存流量降低一个数量级以上，但其端到端收益仍需结合接受率、验证成本和 NPU kernel 实测确认。
+\[
+S_t\in\mathbb{R}^{V\times K}.
+\]
 
-## 未来演进方向
+假设 `head_dim=128`、value 维度也是 128、state 使用 FP32，则单个 state 大小为：
 
-### 1. 接入 vLLM 的动态投机部署
+\[
+B_S=128\times128\times4
+=65{,}536\text{ bytes}=64\text{ KiB}.
+\]
 
-vLLM 主仓当前已经提供 batch-size 驱动的 Dynamic Speculative Decoding。部署时仍通过 `--speculative-config` 配置投机方法和最大 draft 长度，同时增加 `num_speculative_tokens_per_batch_size`：
+当 speculative K=5、验证窗口包含 leading target token 时，共有：
 
-```bash
-vllm serve <target-model> \
-  --speculative-config '{
-    "method": "eagle3",
-    "model": "<draft-model>",
-    "num_speculative_tokens": 5,
-    "num_speculative_tokens_per_batch_size": [
-      [1, 16, 5],
-      [17, 32, 4],
-      [33, 64, 3],
-      [65, 128, 1],
-      [129, 512, 0]
-    ]
-  }'
+\[
+K+1=6
+\]
+
+个位置。PR #17664 的 state-slot 方案需要：
+
+\[
+B_{17664}=6\times64=384\text{ KiB per local head}.
+\]
+
+Kimi K3 [`config.json`](https://huggingface.co/moonshotai/Kimi-K3/blob/main/config.json) 中共有 93 个 hidden layers，其中 `kda_layers` 为 69 层，`num_heads=96`，`head_dim=v_head_dim=128`。以下只计算 **1 个请求**，不包含 causal-conv state、MLA attention KV、workspace、padding 和 allocator 对齐。
+
+TP=1 时每层使用 96 个 heads：
+
+\[
+B_{17664,\text{K3},\text{TP1}}
+=384\text{ KiB}\times69\times96
+=2{,}543{,}616\text{ KiB}
+\approx2{,}484\text{ MiB}
+\approx2.426\text{ GiB}.
+\]
+
+若按常见 TP=8 部署，每个 rank 的 local heads 为 \(96/8=12\)：
+
+\[
+B_{17664,\text{K3},\text{TP8/rank}}
+=384\text{ KiB}\times69\times12
+=317{,}952\text{ KiB}
+\approx310.5\text{ MiB}.
+\]
+
+因此，Kimi K3 在 K=5、FP32 recurrent state、单请求下，PR #17664 的 state-slot 逻辑容量为 **2.426 GiB（TP1）**，或 **310.5 MiB/每卡（TP8）**。实际分配还会受到 TP/PP 分片、slot capacity、padding 和对齐影响。
+
+### PR #19087 的 RecoverSSM 容量
+
+RecoverSSM 不为六个位置保存六个完整的 \(128\times128\) state，而是保存：
+
+- 一个 accepted-prefix checkpoint；
+- correction vectors；
+- key/raw-gate records。
+
+PR #19087 对“五个 speculative token、六个 verified positions、FP32 state”的配置给出的 logical record 大小为：
+
+\[
+B_{19087}=70\text{ KiB per local head}.
+\]
+
+因此：
+
+\[
+\Delta B=384-70=314\text{ KiB per local head},
+\]
+
+\[
+\text{Saving}=1-\frac{70}{384}=81.77\%,
+\qquad
+\frac{70}{384}=18.23\%.
+\]
+
+也就是说，RecoverSSM 记录约为 state-slot 方案的 18.23%。对 Kimi K3，使用同样的 69 个 KDA 层和 96 个 heads，只计算 1 个请求：
+
+TP=1 时：
+
+\[
+B_{19087,\text{K3},\text{TP1}}
+=70\text{ KiB}\times69\times96
+=463{,}680\text{ KiB}
+\approx452.8\text{ MiB}
+\approx0.442\text{ GiB}.
+\]
+
+TP=8 时每个 rank 有 12 个 local heads：
+
+\[
+B_{19087,\text{K3},\text{TP8/rank}}
+=70\text{ KiB}\times69\times12
+=57{,}960\text{ KiB}
+\approx56.6\text{ MiB}.
+\]
+
+对应的 Kimi K3 单请求逻辑节省为：
+
+\[
+\Delta B_{\text{TP1}}
+=2{,}543{,}616-463{,}680
+=2{,}079{,}936\text{ KiB}
+\approx1.984\text{ GiB},
+\]
+
+\[
+\Delta B_{\text{TP8/rank}}
+=317{,}952-57{,}960
+=259{,}992\text{ KiB}
+\approx253.9\text{ MiB}.
+\]
+
+节省比例仍为：
+
+\[
+1-\frac{70}{384}=81.77\%.
+\]
+
+这里的 70 KiB 是 PR #19087 给出的每 local head logical RecoverSSM record 容量，不能简单按六次 `key + gate` 重新推导，因为 correction vectors、key/raw-gate records、capacity 和布局都参与其中。
+
+此前的通用表达式若保留请求数变量应写成：
+
+\[
+\Delta B_{total}=314\text{ KiB}\times L\times H\times R,
+\]
+但本节 Kimi K3 结果固定为单请求 \(R=1\)。
+
+### 显存容量与访存量的区别
+
+显存容量可以直接比较 384 KiB 和 70 KiB；访存量还取决于记录的读写次数。用“一次写入 + 一次读取”的对称模型估算：
+
+\[
+T_{17664}=2\times384=768\text{ KiB},
+\]
+
+\[
+T_{19087}=2\times70=140\text{ KiB},
+\]
+
+\[
+\Delta T=768-140=628\text{ KiB},
+\qquad
+\text{estimated saving}=81.77\%.
+\]
+
+这不是实际 NPU DRAM traffic 的保证值。17664 下一轮可能只读取 accepted slot；19087 还要读取 checkpoint、写入和读取 records、执行 commit，并可能产生 scratch/gather/writeback。真实结果需要采集 NPU memory read/write bytes、kernel duration 和 state-pool transaction counters。
+
+### 不应表述为“整个 KV Cache 减少 81.77%”
+
+需要把“KV Cache”拆成普通 MLA attention KV 和 KDA speculative rollback cache。以下使用 Kimi K3 `config.json`，按 TP=1、单请求、验证窗口 6 个位置计算。配置中有 24 个 `full_attn_layers`，`kv_lora_rank=512`，`qk_rope_head_dim=64`，模型 dtype 为 BF16。
+
+普通 MLA attention 的每个 token、每个 full-attention layer 的缓存元素数为：
+
+\[
+D_{\text{MLA-KV}}=512+64=576.
+\]
+
+BF16 每个元素 2 bytes，因此 6 个验证位置的普通 attention KV 为：
+
+\[
+B_{\text{MLA-KV}}
+=6\times24\times576\times2
+=165{,}888\text{ bytes}
+=162\text{ KiB}.
+\]
+
+这部分在 PR #17664 和 PR #19087 中都需要，RecoverSSM 不会减少它，因此：
+
+\[
+\Delta B_{\text{ordinary KV}}=0.
+\]
+
+上述 162 KiB 采用 Kimi K3 MLA 的压缩 KV 表示（`kv_lora_rank + qk_rope_head_dim`）。如果某个后端把 full-attention 的 K/V 展开为 `96 heads × 128 dim × 2(K/V)`，同样 6 个位置、24 层的普通 KV 会是 6.75 MiB；这仍然是两种方案共同承担的缓存，节省量仍只来自 KDA rollback cache。
+
+KDA 回滚缓存则是前面计算的：
+
+\[
+B_{17664,\text{KDA}}=2{,}543{,}616\text{ KiB},
+\qquad
+B_{19087,\text{KDA}}=463{,}680\text{ KiB}.
+\]
+
+将普通 MLA KV 也计入“投机窗口总逻辑缓存”：
+
+\[
+B_{17664,\text{all}}
+=2{,}543{,}616+162
+=2{,}543{,}778\text{ KiB}
+\approx2.42594\text{ GiB},
+\]
+
+\[
+B_{19087,\text{all}}
+=463{,}680+162
+=463{,}842\text{ KiB}
+\approx0.44235\text{ GiB}.
+\]
+
+因此合并后的逻辑节省为：
+
+\[
+\Delta B_{\text{all}}
+=2{,}543{,}778-463{,}842
+=2{,}079{,}936\text{ KiB}
+\approx1.984\text{ GiB},
+\]
+
+\[
+\text{saving}
+=1-\frac{463{,}842}{2{,}543{,}778}
+\approx81.766\%.
+\]
+
+因此，加入普通 MLA KV 后，理论比例仍约为 **81.77%**，原因是 162 KiB 的普通 KV 相对于 Kimi K3 的 KDA recurrent state 很小；但严格表述应为：
+
+```text
+普通 MLA attention KV：节省 0%
+KDA speculative rollback cache：节省约 81.77%
+两者合计的投机窗口逻辑缓存：节省约 81.766%
+causal-conv state、scratch、padding 和 allocator 对齐：未计入
+实际进程显存：不一定按该比例下降
 ```
 
-每一项 `[start_bs, end_bs, K]` 表示并发 batch size 落在该区间时使用 `K` 个 draft token；`K=0` 表示在高并发时关闭投机。vLLM 的设计动机是：验证成本近似随 `batch_size × K` 增长，当并发升高到某个临界点后，继续投机会恶化 TPOT，因此应动态减小 K。
+PR #19087 当前保留原生 serving cache allocation，并额外使用 scratch，因此上述结果是逻辑缓存容量比较，不能直接等同于整个服务进程的实际显存读数。
 
-当前部署特征：
 
-- vLLM Model Runner V2 可以保留 full CUDA graph；
-- Model Runner V1 在运行时改变验证长度，通常会降级到 piecewise graph；
-- data parallel 当前会自动关闭这项动态 schedule，避免不同 DP rank 选择不同 K 导致 collective divergence；
-- V1 只对部分方法开放动态 K，主线支持范围包括 Eagle/Eagle3、MTP、DFlash 等，具体还受版本和 runner 限制；
-- vLLM 还在推进按请求分配不同 draft 长度的 packed variable-length speculative decoding，目前成熟度低于 batch-level schedule。
+## 技术报告与 PR #19087：Kimi K3 投机验证完整流程
 
-参考：
+以下两张图只关注投机回滚本身。两种方案共享 draft 生成、目标 Kimi K3 前向、causal-conv、projected inputs、recurrent KDA、logits 计算和 rejection sampling；差别在于 speculative recurrent state 的保存与 accepted boundary 之后的提交方式。
 
-- [vLLM Dynamic Speculative Decoding 文档](https://github.com/vllm-project/vllm/blob/main/docs/features/speculative_decoding/dynamic_speculative_decoding.md)
-- [vLLM 动态投机配置与 graph 处理](C:\Users\ASUS\Desktop\kimi_k3\vllm\vllm\config\vllm.py:1041)
-- [SpeculativeConfig 动态 schedule 字段](C:\Users\ASUS\Desktop\kimi_k3\vllm\vllm\config\speculative.py:494)
+### 技术报告方案：projected-input replay
 
-#### 对 Kimi K3 的适配
+```mermaid
+sequenceDiagram
+    participant D as draft proposer
+    participant C as causal-conv state
+    participant P as projected inputs
+    participant K as recurrent KDA
+    participant V as verifier
+    participant R as replay records
 
-Kimi K3 当前的 recurrent kernel 已支持 packed `cu_seqlens`、speculative state indices 和最多 8 token 的短窗口，因此动态 K 可以沿着以下路径接入：
+    D->>C: 处理 draft hidden states
+    C->>P: 产生 q / k / v / gate / beta
+    P->>R: 保存 per-token replay records
+    R->>K: 从 accepted checkpoint Sa 重放
+    K->>V: 生成各位置 target logits
+    V->>V: rejection sampling
 
-1. 第一阶段采用**批次级动态 K**：一个 decode batch 根据并发量选择统一 K，K 限制在 `0..8`，并同步调整 `spec_query_start_loc`、conv state 宽度和 `spec_state_indices`。
-2. 第二阶段支持**请求级动态 K**：同一批请求使用不同的 K，由 scheduler 生成变长 `cu_seqlens`，将每条请求的状态列数限制为实际验证长度。
-3. 第三阶段把 `num_accepted_tokens` 纳入 K 选择策略：低接受率请求减少 K，高接受率请求增加 K；高并发时优先降低 K，低并发或长尾 RL rollout 时提高 K。
+    alt 全部接受
+        V->>C: 保留 accepted conv state
+        V->>K: 提交 accepted + bonus state
+        V->>R: 保留 accepted-prefix records
+    else 在第 r 个位置拒绝
+        V->>C: 恢复 accepted conv state
+        V->>K: 只提交 accepted-prefix state
+        V->>R: 丢弃 rejected suffix records
+    end
 
-K 的选择不能只看 batch size，还应考虑 KDA 回滚成本：
+    C-->>D: 下一轮 Kimi K3 decode
+    K-->>D: 下一轮 recurrent state
+```
 
-\[
-K^* = \arg\max_K \frac{E[A_K]+1}{C_{draft}(K)+C_{verify}(K)+C_{rollback}(K)}
-\]
+技术报告方案不为每个 speculative position 保存完整 recurrent state，而是保存能够重建递推的 projected-input / replay records。验证期间从 accepted checkpoint 重放；rejection sampling 确定边界后，只提交 accepted prefix 和 bonus position。causal-conv state 也必须恢复到同一个 accepted boundary。
 
-其中 (E[A_K]) 是窗口长度 K 下的平均接受 token 数。当前 state-slot 方案中，增大 K 会同时增加 state slot 数、状态写回量和短卷积缓存宽度；因此 K 的最优值可能低于普通 Transformer 草稿模型的最优值。
+### PR #19087：RecoverSSM verify / commit
 
-#### 对 Kimi K3 的主要工程改动
+```mermaid
+sequenceDiagram
+    participant D as draft proposer
+    participant C as causal-conv state
+    participant P as projected inputs
+    participant V as verifier
+    participant R as RecoverSSM records
+    participant K as recurrent KDA state
 
-- 让 vLLM-Ascend 的 scheduler 将动态 K 转换成 KDA 可消费的 `cu_seqlens` 和二维 `spec_state_indices`；
-- 为每个 K tier 准备 graph/capture shape，避免动态 K 破坏 NPU graph replay；
-- 将 `state_capacity`、slot 生命周期和 rejected slot 回收纳入调度器；
-- 确保 causal-conv 与 recurrent KDA 使用同一个 accepted prefix 和同一组 token offsets；
-- 将 acceptance、K、state traffic、TPOT 作为联合反馈，而不是只按并发量静态查表。
+    D->>C: 处理 draft hidden states
+    C->>P: 产生 spec q / k / v / gate / beta
+    P->>V: 输入验证窗口
+    V->>K: kda_recoverssm_verify 前向执行 KDA
+    V->>R: 写 correction vectors
+    V->>R: 写 key + raw-gate records
+    V-->>K: checkpoint Sa 保持不变
+    V->>V: 生成 target logits
+    V->>V: rejection sampling
 
-### 2. 引入投机推理 KV 滑窗
+    alt 全部接受
+        V->>R: accepted-prefix records
+        V->>K: kda_recoverssm_commit
+        K->>K: 反向累积并提交 accepted + bonus state
+        V->>C: 保留 accepted conv state
+    else 在第 r 个位置拒绝
+        V->>R: 截断到 accepted-prefix records
+        V->>K: kda_recoverssm_commit accepted prefix
+        K->>K: 丢弃 rejected suffix 的恢复路径
+        V->>C: 恢复 accepted conv state
+    end
 
-vLLM-Ascend 的 PR #10023 和 PR #14596 已经形成了一套较完整的 draft KV sliding window 方案：**只限制 draft 模型读取的 KV 范围，target 模型仍然读取完整上下文**。因此滑窗不会改变最终 target 的计算语义，主要用于恢复长上下文下 draft 的接受率。
+    C-->>D: 下一轮 Kimi K3 decode
+    K-->>D: 下一轮 recurrent state
+```
 
-#### PR #10023：Eagle3 / DFlash
+PR #19087 在 verify 阶段不修改 accepted checkpoint (S_a)，而是保存 correction、key 和 raw-gate 等记录。rejection sampling 得到 accepted boundary 后，commit 只恢复 accepted prefix；rejected suffix records 被丢弃。该方式用 records、反向恢复和 commit 计算，减少每个 speculative position 的完整 recurrent state 保存。
 
-PR [#10023](https://github.com/vllm-project/vllm-ascend/pull/10023) 为 Eagle3 和 DFlash 增加了 `draft_window_size`。实现要点是：
+### 两种流程的共同因果边界
 
-- 根据最终序列长度和窗口 W 计算窗口起点；
-- 将起点按 KV block 对齐；
-- 裁剪 draft attention 使用的 block table 和 sequence length；
-- 保留完整 block table，用于绝对 slot mapping 和 KV cache 写入；
-- 使用固定形状的窗口 block table，兼容 graph capture/replay。
+```text
+draft token ids
+      ↓
+target K3 前向：causal-conv → q/k/v/gate/beta → recurrent KDA → logits
+      ↓
+rejection sampling：确定 accepted boundary
+      ↓
+同步恢复 causal-conv state 与 recurrent KDA state
+      ↓
+从 accepted prefix 进入下一轮
+```
 
-PR 的长上下文结果显示，滑窗可以显著改善接受率：
+不能只恢复 KDA state 而保留 rejected suffix 的 causal-conv state；否则下一轮生成的 q/k/v/gate/beta 会携带被拒绝 token 的历史。
 
-- Eagle3 LongBenchV2 平均接受长度从 1.3358 提高到 1.8809；
-- DFlash 在 32k 输入上平均接受长度从 3.5548 提高到约 4.3646；
-- DFlash 输出 token/s 在 32k、64k、96k、128k 输入上分别约提升 11.0%、3.6%、17.6%、15.5%（窗口取 2048）；
-- PR 总结的 Eagle3 输出性能收益约为 30%~48%，DFlash 约为 10%，具体数值依赖任务和窗口大小。
-
-这说明滑窗的主要收益不是减少 target 计算，而是避免 draft 在超出训练上下文后出现接受率崩溃。
-
-#### PR #14596：DSpark
-
-PR [#14596](https://github.com/vllm-project/vllm-ascend/pull/14596) 将同一能力扩展到 DSpark，并处理了 DSpark 的 per-group block table：
-
-- 在 DSpark 的每个 attention group 上分别应用窗口；
-- 只裁剪 FIA 实际读取的 KV-length tensors；
-- 保持 slot mapping 使用完整、绝对地址的 block table；
-- 对 MTP 强制关闭滑窗，因为 MTP 复用 target 模型层，改变其 attention 窗口会改变 target 计算；
-- 对原生训练时已经使用 sliding window 的 DeepSeek-V4/DSpark draft 给出兼容性提示；
-- MRV1 需要在 common metadata 和 DSpark per-group metadata 的正确位置应用窗口，避免重复 windowing；
-- MRV2 需要在 builder 输入层做窗口化，并注意 graph replay 和 `enforce_eager` 约束。
-
-#### 滑窗为什么适合长上下文 draft
-
-很多 draft 模型只在 4k~8k 上下文训练。输入变成几十万 token 后，如果 draft 仍然对完整前缀做 attention，它看到的分布已经偏离训练分布，后续 token 接受率快速下降。滑窗把 draft 的有效上下文限制在最近 W 个 token，使 draft 的输入分布回到训练范围；target 仍保留完整上下文，因此不会改变最终输出的正确性保证。
-
-窗口大小不应盲目取小：W 小于 draft 原生训练窗口会丢掉本来有用的上下文。vLLM-Ascend 文档建议在 512~4096 范围内用真实任务测试，并观察 `SpecDecoding metrics: Mean acceptance length`。
-
-### 3. KV 滑窗与 Kimi K3 的结合方式
-
-#### 当前 MTP 路径不能直接套用 draft KV 滑窗
-
-Kimi K3 的当前投机路径是 MTP/target-layer reuse。MTP 草稿阶段复用 target 模型自身的层，因此像 PR #14596 所描述的那样，直接缩短 MTP 的 attention 窗口会改变 target 的计算，不能简单视为“只优化 draft”。这也是现有 vLLM 文档对 MTP 强制关闭 draft window 的原因。
-
-此外，KDA 的主状态不是普通 token-by-token KV cache，而是 recurrent state。若直接把 target KDA 状态截断为最近 W 个 token，需要从窗口起点重新构建状态：
-
-\[
-S_{t_0} = F^{t_0}(S_{0}, x_{1:t_0})
-\]
-
-这会重新引入长前缀计算，抵消滑窗带来的收益。因此，滑窗应优先作用于**独立 draft 模型的 attention KV**，而不是直接截断 target KDA state。
-
-#### 推荐的 Kimi K3 演进方案
-
-1. **独立轻量 draft + KDA target**：为 Kimi K3 配置 Eagle3、DFlash 或 DSpark 类独立 draft，target 保持完整 KDA/MLA 上下文；复用 PR #10023/#14596 的 `draft_window_size`。
-2. **KDA-aware draft window**：如果 draft 自身也包含 KDA，窗口边界不能只裁 block table，而要同时维护 draft 的 recurrent state checkpoint；窗口移动时从最近 checkpoint replay 到窗口起点。
-3. **滑窗与动态 K 联动**：长上下文时先通过窗口提高 acceptance，再根据 batch size 和实时 acceptance 选择 K；窗口 W 与 K 不应独立调参。
-4. **状态绝对索引保持不变**：滑窗只改变 draft attention 的读取范围，`spec_state_indices`、target KDA state 和 rejected-slot 回收仍使用全局 token/slot 坐标。
-
-联合目标可以写为：
-
-\[
-(W^*,K^*) = \arg\max_{W,K}
-\frac{E[A(W,K)]+1}
-{C_{draft}(W,K)+C_{verify}(K)+C_{rollback}(K)}
-\]
-
-其中：
-
-- 增大 W 可能提高接受率，但增加 draft attention 计算和 KV 读取；
-- 减小 W 可能降低 draft 计算，但如果低于训练窗口会降低接受率；
-- 增大 K 可能提高每轮产出 token 数，但会增加验证、回滚和 state slot 流量；
-- KDA 的 `C_rollback` 还受到 state snapshot 或 projected-input replay 策略影响。
-
-### 4. 推荐的落地顺序
-
-对 Kimi K3，建议按下面顺序推进：
-
-1. **先补齐当前实现的指标**：记录 acceptance length、K、窗口长度、recurrent/conv kernel latency、state slot 读写和 TPOT。
-2. **先做 batch-level dynamic K**：利用 vLLM 已有 schedule，限制 K≤8，并在 NPU graph 中为每个 K tier 预留 shape。
-3. **再做独立 draft 的 KV sliding window**：优先支持 Eagle3/DFlash/DSpark draft，target KDA 保持全上下文。
-4. **再做 request-level variable K**：让 `cu_seqlens` 和 `spec_state_indices` 支持同一 batch 内的异构窗口长度。
-5. **最后优化 KDA rollback traffic**：把当前 state-slot 方案演进到 projected-input replay，减少每个 draft position 的完整 state 读写。
-
-这样可以把三个收益来源分开验证：
-
-- dynamic K：减少高并发时的无效验证开销；
-- draft KV window：恢复长上下文下的接受率；
-- projected-input replay：降低 KDA 回滚的状态内存流量。

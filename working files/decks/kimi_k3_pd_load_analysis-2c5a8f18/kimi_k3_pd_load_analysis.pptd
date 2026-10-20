@@ -1,0 +1,59 @@
+version: v2
+title: kimi_k3_pd_load_analysis
+size: [960, 540]
+theme:
+  colors:
+    dk1: "#000000"
+    lt1: "#FFFFFF"
+    red: "#C00000"
+    ink: "#262626"
+    gray: "#737373"
+    cCalc: "#4C78A8"
+    cMem: "#F2A93B"
+    cComm: "#E45756"
+    cOther: "#C9C9C9"
+  textStyles:
+    text1:
+      color: "$red"
+      fontSize: 12
+      fontFamily: 微软雅黑, 微软雅黑
+      bold: true
+    text2:
+      color: "$ink"
+      fontSize: 8
+      fontFamily: 微软雅黑, 微软雅黑
+      lineHeight: 1.35
+  tableStyles:
+    table3:
+      cellStyle:
+        fontSize: 7.5
+        fontFamily: 微软雅黑, 微软雅黑
+        lineHeight: 1.25
+        align:
+          - left
+          - middle
+      firstRowStyle:
+        color: "$ink"
+        bold: true
+        fill:
+          type: solid
+          color: "#F5F5F5"
+        border:
+          - null
+          - null
+          - style: solid
+            width: 1
+            color: "#737373"
+          - null
+      firstColumnStyle:
+        color: "$ink"
+        border:
+          - null
+          - null
+          - style: solid
+            width: 0.75
+            color: "#D4D4D4"
+          - null
+      rowOverColumn: true
+pages:
+  - pages/1_pd_load.page
