@@ -148,21 +148,21 @@ sequenceDiagram
 
 技术报告中的 KDA 递推可写为：
 
-\[
+$$
 S_t=M_tS_{t-1}+\beta_t k_t v_t^\top,
 \qquad
 M_t=(I-\beta_t k_t k_t^\top)\operatorname{Diag}(\alpha_t),
-\]
+$$
 
-\[
+$$
 \tilde{o}_t=S_t^\top q_t.
-\]
+$$
 
 给定 accepted prefix 末端状态 S_a，后续状态完全由 draft token 的投影输入决定：
 
-\[
+$$
 S_{a+i}=F(S_{a+i-1},P_{a+i}).
-\]
+$$
 
 其中 P_t 是生成 KDA 递推所需的 key/value/gate/beta 等 per-token 记录。技术报告的 replay 流程是：
 
@@ -219,35 +219,35 @@ kda_recoverssm_commit：得到 rejection sampling 的 accepted 边界，从最�
 
 一个 recurrent state：
 
-\[
+$$
 B_S=128\times128\times4=65{,}536\text{ bytes}=64\text{ KiB}.
-\]
+$$
 
 PR #17664 对 6 个位置：
 
-\[
+$$
 B_{17664}=6B_S=384\text{ KiB}.
-\]
+$$
 
 这与 PR #19087 描述中的 FP32 baseline 一致。
 
 PR #19087 对相同配置给出的 logical RecoverSSM records：
 
-\[
+$$
 B_{19087}=70\text{ KiB per head}.
-\]
+$$
 
 因此：
 
-\[
+$$
 \Delta B=384-70=314\text{ KiB per head},
-\]
+$$
 
-\[
+$$
 \text{节省比例}=1-70/384=81.77\%,
 \qquad
 70/384=18.23\%.
-\]
+$$
 
 单 local head 的逻辑 recurrent 存储从 384 KiB 降到约 70 KiB。
 
@@ -257,19 +257,19 @@ B_{19087}=70\text{ KiB per head}.
 
 显存容量和实际 NPU DRAM traffic 不是同一个指标。采用每条记录一次写入、一次读取的对称逻辑模型：
 
-\[
+$$
 T_{17664}=2\times384=768\text{ KiB},
-\]
+$$
 
-\[
+$$
 T_{19087}=2\times70=140\text{ KiB},
-\]
+$$
 
-\[
+$$
 \Delta T=768-140=628\text{ KiB},
 \qquad
 \text{估算节省}=81.77\%.
-\]
+$$
 
 这只是 record traffic 的模型化估算。真实流量会受 accepted slot 是否只读一个 state、19087 的 checkpoint/records/scratch 读写、tile/padding、连续性、cache 命中和 kernel 融合影响。因此 81.77% 不是实测 DRAM 降幅，需要采集 NPU memory read/write bytes 和 state-pool transaction counters 才能确认。
 
@@ -303,55 +303,55 @@ PR #19087 的本质增益是：把 KDA speculative rollback 从“保存每个�
 
 KDA 每个 recurrent state 是一个矩阵：
 
-\[
+$$
 S_t\in\mathbb{R}^{V\times K}.
-\]
+$$
 
 假设 `head_dim=128`、value 维度也是 128、state 使用 FP32，则单个 state 大小为：
 
-\[
+$$
 B_S=128\times128\times4
 =65{,}536\text{ bytes}=64\text{ KiB}.
-\]
+$$
 
 当 speculative K=5、验证窗口包含 leading target token 时，共有：
 
-\[
+$$
 K+1=6
-\]
+$$
 
 个位置。PR #17664 的 state-slot 方案需要：
 
-\[
+$$
 B_{17664}=6\times64=384\text{ KiB per local head}.
-\]
+$$
 
 Kimi K3 [`config.json`](https://huggingface.co/moonshotai/Kimi-K3/blob/main/config.json) 中共有 93 个 hidden layers，其中 `kda_layers` 为 69 层，`num_heads=96`，`head_dim=v_head_dim=128`。以下只计算 **1 个请求**，不包含 causal-conv state、MLA attention KV、workspace、padding 和 allocator 对齐。
 
 TP=1 时每层使用 96 个 heads：
 
-\[
+$$
 B_{17664,\text{K3},\text{TP1}}
 =384\text{ KiB}\times69\times96
 =2{,}543{,}616\text{ KiB}
 \approx2{,}484\text{ MiB}
 \approx2.426\text{ GiB}.
-\]
+$$
 
-若按常见 TP=8 部署，每个 rank 的 local heads 为 \(96/8=12\)：
+若按常见 TP=8 部署，每个 rank 的 local heads 为 $96/8=12$：
 
-\[
+$$
 B_{17664,\text{K3},\text{TP8/rank}}
 =384\text{ KiB}\times69\times12
 =317{,}952\text{ KiB}
 \approx310.5\text{ MiB}.
-\]
+$$
 
 因此，Kimi K3 在 K=5、FP32 recurrent state、单请求下，PR #17664 的 state-slot 逻辑容量为 **2.426 GiB（TP1）**，或 **310.5 MiB/每卡（TP8）**。实际分配还会受到 TP/PP 分片、slot capacity、padding 和对齐影响。
 
 ### PR #19087 的 RecoverSSM 容量
 
-RecoverSSM 不为六个位置保存六个完整的 \(128\times128\) state，而是保存：
+RecoverSSM 不为六个位置保存六个完整的 $128\times128$ state，而是保存：
 
 - 一个 accepted-prefix checkpoint；
 - correction vectors；
@@ -359,91 +359,91 @@ RecoverSSM 不为六个位置保存六个完整的 \(128\times128\) state，而�
 
 PR #19087 对“五个 speculative token、六个 verified positions、FP32 state”的配置给出的 logical record 大小为：
 
-\[
+$$
 B_{19087}=70\text{ KiB per local head}.
-\]
+$$
 
 因此：
 
-\[
+$$
 \Delta B=384-70=314\text{ KiB per local head},
-\]
+$$
 
-\[
+$$
 \text{Saving}=1-\frac{70}{384}=81.77\%,
 \qquad
 \frac{70}{384}=18.23\%.
-\]
+$$
 
 也就是说，RecoverSSM 记录约为 state-slot 方案的 18.23%。对 Kimi K3，使用同样的 69 个 KDA 层和 96 个 heads，只计算 1 个请求：
 
 TP=1 时：
 
-\[
+$$
 B_{19087,\text{K3},\text{TP1}}
 =70\text{ KiB}\times69\times96
 =463{,}680\text{ KiB}
 \approx452.8\text{ MiB}
 \approx0.442\text{ GiB}.
-\]
+$$
 
 TP=8 时每个 rank 有 12 个 local heads：
 
-\[
+$$
 B_{19087,\text{K3},\text{TP8/rank}}
 =70\text{ KiB}\times69\times12
 =57{,}960\text{ KiB}
 \approx56.6\text{ MiB}.
-\]
+$$
 
 对应的 Kimi K3 单请求逻辑节省为：
 
-\[
+$$
 \Delta B_{\text{TP1}}
 =2{,}543{,}616-463{,}680
 =2{,}079{,}936\text{ KiB}
 \approx1.984\text{ GiB},
-\]
+$$
 
-\[
+$$
 \Delta B_{\text{TP8/rank}}
 =317{,}952-57{,}960
 =259{,}992\text{ KiB}
 \approx253.9\text{ MiB}.
-\]
+$$
 
 节省比例仍为：
 
-\[
+$$
 1-\frac{70}{384}=81.77\%.
-\]
+$$
 
 这里的 70 KiB 是 PR #19087 给出的每 local head logical RecoverSSM record 容量，不能简单按六次 `key + gate` 重新推导，因为 correction vectors、key/raw-gate records、capacity 和布局都参与其中。
 
 此前的通用表达式若保留请求数变量应写成：
 
-\[
+$$
 \Delta B_{total}=314\text{ KiB}\times L\times H\times R,
-\]
-但本节 Kimi K3 结果固定为单请求 \(R=1\)。
+$$
+但本节 Kimi K3 结果固定为单请求 $R=1$。
 
 ### 显存容量与访存量的区别
 
 显存容量可以直接比较 384 KiB 和 70 KiB；访存量还取决于记录的读写次数。用“一次写入 + 一次读取”的对称模型估算：
 
-\[
+$$
 T_{17664}=2\times384=768\text{ KiB},
-\]
+$$
 
-\[
+$$
 T_{19087}=2\times70=140\text{ KiB},
-\]
+$$
 
-\[
+$$
 \Delta T=768-140=628\text{ KiB},
 \qquad
 \text{estimated saving}=81.77\%.
-\]
+$$
 
 这不是实际 NPU DRAM traffic 的保证值。17664 下一轮可能只读取 accepted slot；19087 还要读取 checkpoint、写入和读取 records、执行 commit，并可能产生 scratch/gather/writeback。真实结果需要采集 NPU memory read/write bytes、kernel duration 和 state-pool transaction counters。
 
@@ -453,65 +453,125 @@ T_{19087}=2\times70=140\text{ KiB},
 
 普通 MLA attention 的每个 token、每个 full-attention layer 的缓存元素数为：
 
-\[
+$$
 D_{\text{MLA-KV}}=512+64=576.
-\]
+$$
 
 BF16 每个元素 2 bytes，因此 6 个验证位置的普通 attention KV 为：
 
-\[
+$$
 B_{\text{MLA-KV}}
 =6\times24\times576\times2
 =165{,}888\text{ bytes}
 =162\text{ KiB}.
-\]
+$$
 
 这部分在 PR #17664 和 PR #19087 中都需要，RecoverSSM 不会减少它，因此：
 
-\[
+$$
 \Delta B_{\text{ordinary KV}}=0.
-\]
+$$
 
 上述 162 KiB 采用 Kimi K3 MLA 的压缩 KV 表示（`kv_lora_rank + qk_rope_head_dim`）。如果某个后端把 full-attention 的 K/V 展开为 `96 heads × 128 dim × 2(K/V)`，同样 6 个位置、24 层的普通 KV 会是 6.75 MiB；这仍然是两种方案共同承担的缓存，节省量仍只来自 KDA rollback cache。
 
+### 纳入 Kimi-K3-DSpark 草稿模型 KV Cache
+
+根据 [Kimi-K3-DSpark `config.json`](https://huggingface.co/Inferact/Kimi-K3-DSpark/blob/main/config.json)，草稿模型具有：
+
+- `num_hidden_layers=5`
+- `kv_lora_rank=512`
+- `qk_rope_head_dim=64`
+- `v_head_dim=128`
+- `torch_dtype=bfloat16`
+
+它是 MLA-native draft，因此每个草稿 token、每层的压缩 KV 记录仍按：
+
+$$
+D_{\text{draft-KV}}=512+64=576
+$$
+
+个 BF16 元素计算。K=5 时，草稿模型新增 5 个 token 的 KV Cache 为：
+
+$$
+B_{\text{draft-KV}}
+=5\times5\times576\times2
+=28{,}800\text{ bytes}
+=28.125\text{ KiB}.
+$$
+
+这里按草稿模型实际生成的 K 个 token 计算；如果实现按验证窗口预留 K+1 个 draft slot，则容量为 33.75 KiB，但多出的 5.625 KiB 是预留容量，不是实际新增 token KV。
+
+因此，K=5、单请求、TP=1 下，加入 target MLA KV 和 DSpark draft KV 后：
+
+$$
+B_{17664,\text{all}}
+=2{,}543{,}616+162+28.125
+=2{,}543{,}806.125\text{ KiB}
+\approx2.42596\text{ GiB},
+$$
+
+$$
+B_{19087,\text{all}}
+=463{,}680+162+28.125
+=463{,}870.125\text{ KiB}
+\approx0.44238\text{ GiB}.
+$$
+
+草稿 KV 和 target MLA KV 在两个方案中都存在，因此总节省仍完全来自 KDA rollback cache：
+
+$$
+\Delta B_{\text{all}}
+=2{,}543{,}806.125-463{,}870.125
+=2{,}079{,}936\text{ KiB}
+\approx1.984\text{ GiB},
+$$
+
+$$
+\text{saving}
+=1-\frac{463{,}870.125}{2{,}543{,}806.125}
+\approx81.765\%.
+$$
+
+加入 DSpark 草稿 KV 后，合计逻辑缓存节省比例从约 81.766% 变为约 **81.765%**，几乎不变，因为 5 层草稿 MLA KV 只有 28.125 KiB，相对于 Kimi K3 的 KDA recurrent state 很小。
+
 KDA 回滚缓存则是前面计算的：
 
-\[
+$$
 B_{17664,\text{KDA}}=2{,}543{,}616\text{ KiB},
 \qquad
 B_{19087,\text{KDA}}=463{,}680\text{ KiB}.
-\]
+$$
 
 将普通 MLA KV 也计入“投机窗口总逻辑缓存”：
 
-\[
+$$
 B_{17664,\text{all}}
 =2{,}543{,}616+162
 =2{,}543{,}778\text{ KiB}
 \approx2.42594\text{ GiB},
-\]
+$$
 
-\[
+$$
 B_{19087,\text{all}}
 =463{,}680+162
 =463{,}842\text{ KiB}
 \approx0.44235\text{ GiB}.
-\]
+$$
 
 因此合并后的逻辑节省为：
 
-\[
+$$
 \Delta B_{\text{all}}
 =2{,}543{,}778-463{,}842
 =2{,}079{,}936\text{ KiB}
 \approx1.984\text{ GiB},
-\]
+$$
 
-\[
+$$
 \text{saving}
 =1-\frac{463{,}842}{2{,}543{,}778}
 \approx81.766\%.
-\]
+$$
 
 因此，加入普通 MLA KV 后，理论比例仍约为 **81.77%**，原因是 162 KiB 的普通 KV 相对于 Kimi K3 的 KDA recurrent state 很小；但严格表述应为：
 
@@ -647,4 +707,6 @@ rejection sampling：确定 accepted boundary
 ```
 
 不能只恢复 KDA state 而保留 rejected suffix 的 causal-conv state；否则下一轮生成的 q/k/v/gate/beta 会携带被拒绝 token 的历史。
+
+
 
