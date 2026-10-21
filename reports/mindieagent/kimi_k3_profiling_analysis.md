@@ -89,3 +89,12 @@ P 的 MoE 是最大算子负载（50.6%）。优化顺序建议为 `GroupedMatmu
 ## 4. 结论
 
 P 阶段首先优化通信与 MoE：通信未重叠部分是最大的阶段级损失，算子级优先级为 `GroupedMatmul`、量化链路、`ChunkKdaFwd`。D 阶段首先优化计算 kernel：优先 `FlashMlaWithKvcache`、`GroupedMatmulSituQuant`/`GroupedMatmul` 和 QuantBatchMatmul 链路。两阶段都应以 MTE 和计算子计数器为依据做 kernel 融合、布局和 tiling 调优，并用端到端 Stage 时间复测，避免只看算子累计时间。
+
+# Kernel 计数器与通信掩盖后的负载折算
+
+|阶段/模块|计算|访存|通信|
+|---|---:|---:|---:|
+|P-Attention|10.6%|0.2%|89.2%|
+|P-MoE|9.2%|16.6%|74.2%|
+|D-Attention|66.0%|6.3%|27.7%|
+|D-MoE|7.0%|64.1%|28.9%|

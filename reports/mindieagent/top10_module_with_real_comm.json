@@ -1,0 +1,190 @@
+{
+  "P-Attention": [
+    {
+      "n": "ChunkKdaFwd",
+      "t": 1333460.047,
+      "type": "计算"
+    },
+    {
+      "n": "hcom_reduceScatter_",
+      "t": 1254891.575,
+      "type": "通信"
+    },
+    {
+      "n": "hcom_allGather_",
+      "t": 1184617.848,
+      "type": "通信"
+    },
+    {
+      "n": "FusedInferAttentionScore",
+      "t": 487768.919,
+      "type": "计算"
+    },
+    {
+      "n": "_apply_attn_res_kernel",
+      "t": 76119.885,
+      "type": "计算"
+    },
+    {
+      "n": "hcom_allReduce_",
+      "t": 76105.076,
+      "type": "通信"
+    },
+    {
+      "n": "CausalConv1d",
+      "t": 63075.794,
+      "type": "计算"
+    }
+  ],
+  "P-MoE": [
+    {
+      "n": "hcom_broadcast_",
+      "t": 5540434.037,
+      "type": "通信"
+    },
+    {
+      "n": "hcom_alltoallv_",
+      "t": 1627639.455,
+      "type": "通信"
+    },
+    {
+      "n": "GroupedMatmulWeightNz",
+      "t": 1396574.62,
+      "type": "访存"
+    },
+    {
+      "n": "hcom_send_",
+      "t": 1008774.565,
+      "type": "通信"
+    },
+    {
+      "n": "DequantSituQuant",
+      "t": 784557.735,
+      "type": "计算"
+    },
+    {
+      "n": "QuantBatchMatmulV3",
+      "t": 752519.953,
+      "type": "访存"
+    },
+    {
+      "n": "DynamicQuant",
+      "t": 665931.13,
+      "type": "计算"
+    },
+    {
+      "n": "MoeTokenUnpermute",
+      "t": 80338.29,
+      "type": "访存"
+    },
+    {
+      "n": "MoeTokenPermute",
+      "t": 48422.106,
+      "type": "访存"
+    },
+    {
+      "n": "MoeGatingTopK",
+      "t": 17534.615,
+      "type": "计算"
+    }
+  ],
+  "D-Attention": [
+    {
+      "n": "FlashMlaWithKvcache",
+      "t": 249041.141,
+      "type": "计算"
+    },
+    {
+      "n": "hcom_allGather_",
+      "t": 164606.497,
+      "type": "通信"
+    },
+    {
+      "n": "hcom_reduceScatter_",
+      "t": 128823.222,
+      "type": "通信"
+    },
+    {
+      "n": "HCCL other",
+      "t": 65478.048,
+      "type": "通信"
+    },
+    {
+      "n": "MlaPrologV3",
+      "t": 38273.203,
+      "type": "访存"
+    },
+    {
+      "n": "CausalConv1dV2",
+      "t": 28474.453,
+      "type": "计算"
+    },
+    {
+      "n": "hcom_allReduce_",
+      "t": 20309.765,
+      "type": "通信"
+    },
+    {
+      "n": "_quantize_mla_query_kernel",
+      "t": 11922.46,
+      "type": "计算"
+    },
+    {
+      "n": "_flash_attention_gate_kernel",
+      "t": 3466.026,
+      "type": "计算"
+    },
+    {
+      "n": "_quantize_mla_kv_kernel",
+      "t": 3209.989,
+      "type": "计算"
+    }
+  ],
+  "D-MoE": [
+    {
+      "n": "GroupedMatmulSituQuant",
+      "t": 405278.863,
+      "type": "访存"
+    },
+    {
+      "n": "GroupedMatmulWeightNz",
+      "t": 215590.079,
+      "type": "访存"
+    },
+    {
+      "n": "SituMxQuant",
+      "t": 212783.656,
+      "type": "计算"
+    },
+    {
+      "n": "MoeDistributeDispatch/Combine",
+      "t": 166517.974,
+      "type": "通信"
+    },
+    {
+      "n": "QuantBatchMatmulV4",
+      "t": 166161.935,
+      "type": "访存"
+    },
+    {
+      "n": "QuantBatchMatmulV3",
+      "t": 157749.458,
+      "type": "访存"
+    },
+    {
+      "n": "DynamicMxQuant",
+      "t": 66500.273,
+      "type": "计算"
+    },
+    {
+      "n": "hcom_alltoall_",
+      "t": 18602.674,
+      "type": "通信"
+    },
+    {
+      "n": "hcom_broadcast_",
+      "t": 222.677,
+      "type": "通信"
+    }
+  ]
+}
