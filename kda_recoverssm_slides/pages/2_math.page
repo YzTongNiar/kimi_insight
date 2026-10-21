@@ -1,0 +1,101 @@
+pageType: content
+background:
+  type: solid
+  color: "#FFFFFF"
+elements:
+  - elementId: title
+    elementType: text
+    bounds: [40, 24, 880, 30]
+    content:
+      fontSize: 20
+      bold: true
+      color: "$text"
+      align: [left, middle]
+      wrap: false
+      text: 数学符号对照：存储 / 重建 / 写入
+  - elementId: subtitle
+    elementType: text
+    bounds: [40, 56, 880, 14]
+    content:
+      fontSize: 10
+      color: "$muted"
+      align: [left, middle]
+      wrap: false
+      text: 与 kimi_k3_spec_decode_analysis_math.md 的公式一一对应
+
+  - elementId: math-table
+    elementType: table
+    bounds: [40, 84, 880, 300]
+    columnWidths: [0.17, 0.45, 0.38]
+    rowHeights: [0.14, 0.172, 0.172, 0.172, 0.172, 0.172]
+    style:
+      cellStyle:
+        fontSize: 10
+        color: "$text"
+        align: [left, middle]
+        border: {style: solid, width: 1, color: "#E2E8F0"}
+      firstRowStyle:
+        fill: {type: solid, color: "$primary"}
+        color: "#FFFFFF"
+        bold: true
+        fontSize: 11
+        align: [center, middle]
+    rows:
+      - - text: 环节
+        - text: 公式
+        - text: 说明
+      - - text: |
+            <p><strong>verify 单步递推</strong></p>
+        - text: |
+            <p>\(S_t=S_{t-1}D_t+u_t\hat{k}_t^{\mathsf{T}},\quad y_t=S_t\hat{q}_t\)</p>
+        - text: 按列衰减 + rank-1 修正；checkpoint S₀ 全程只读
+      - - text: |
+            <p><strong>verify 存储记录</strong></p>
+        - text: |
+            <p>\(R_t=(u_t,\ k_t,\ g^{\rm raw}_t)\)</p>
+        - text: 每位置 O(V+2K) 向量；pending 仅存于本同步步
+      - - text: |
+            <p><strong>接受前缀闭式</strong></p>
+        - text: |
+            <p>\(S_n=S_0D_1\cdots D_n+\sum_{i=1}^{n}u_i\hat{k}_i^{\mathsf{T}}D_{i+1}\cdots D_n\)</p>
+        - text: 较早位置的 correction 仍承受后续位置的列衰减
+      - - text: |
+            <p><strong>commit 反向累积</strong></p>
+        - text: |
+            <p>\(U\leftarrow U+u_t\hat{k}_t^{\mathsf{T}}P,\ \ P\leftarrow D_tP,\ \ S_{\rm rebuilt}=S_0P+U\)</p>
+        - text: t=n…1 反向；写回原生 slot 并镜像到全部槽位
+      - - text: |
+            <p><strong>存储量级</strong></p>
+        - text: |
+            <p>\(O(LHVK)\ \longrightarrow\ O\big(HVK+LH(V+2K)\big)\)</p>
+        - text: 每请求 1 个 checkpoint + 每位置向量记录
+
+  - elementId: contract-card
+    elementType: shape
+    bounds: [40, 404, 880, 104]
+    shapeName: roundRect
+    adjustments: [6000]
+    fill: {type: solid, color: "$band"}
+    border: {style: solid, width: 1, color: "$bandBorder"}
+  - elementId: contract-title
+    elementType: text
+    bounds: [58, 414, 200, 18]
+    content:
+      fontSize: 12
+      bold: true
+      color: "$primary"
+      align: [left, middle]
+      wrap: false
+      text: 顺序契约
+  - elementId: contract-body
+    elementType: text
+    bounds: [58, 436, 844, 64]
+    content:
+      fontSize: 10
+      color: "$text"
+      lineHeight: 1.5
+      align: [left, top]
+      text: |
+        <p>① verify 只读 S₀：验证前向期间原生 recurrent state 保持不变；</p>
+        <p>② 拒绝采样确定 n 后立即 commit，且 commit 先于草稿模型前向；</p>
+        <p>③ commit 前的二次 verify 直接报错，不会静默覆盖 pending 记录。</p>

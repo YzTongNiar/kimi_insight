@@ -1,0 +1,22 @@
+version: v2
+title: Kimi K3 KDA RecoverSSM 投机推理流程
+size: [960, 540]
+theme:
+  colors:
+    primary: "#2563EB"
+    primaryLight: "#EFF6FF"
+    primaryMid: "#DBEAFE"
+    accent: "#EA580C"
+    accentLight: "#FFF7ED"
+    violet: "#7C3AED"
+    violetLight: "#F5F3FF"
+    green: "#059669"
+    greenLight: "#ECFDF5"
+    text: "#1F2937"
+    muted: "#64748B"
+    band: "#F8FAFC"
+    bandBorder: "#E2E8F0"
+    edge: "#64748B"
+pages:
+  - pages/1_flow.page
+  - pages/2_math.page

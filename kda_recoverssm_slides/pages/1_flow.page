@@ -1,0 +1,430 @@
+pageType: content
+background:
+  type: solid
+  color: "#FFFFFF"
+elements:
+  # ---------- 标题 ----------
+  - elementId: title
+    elementType: text
+    bounds: [35, 14, 700, 28]
+    content:
+      fontSize: 20
+      bold: true
+      color: "$text"
+      align: [left, middle]
+      wrap: false
+      text: Kimi K3 KDA RecoverSSM 投机推理流程
+  - elementId: subtitle
+    elementType: text
+    bounds: [35, 44, 890, 14]
+    content:
+      fontSize: 10
+      color: "$muted"
+      align: [left, middle]
+      wrap: false
+      text: "vllm-ascend PR #19087 · 符号对照 kimi_k3_spec_decode_analysis_math.md · 全部图形原生可编辑"
+
+  # ---------- 阶段标注 ----------
+  - elementId: phase1
+    elementType: text
+    bounds: [35, 62, 335, 16]
+    content:
+      fontSize: 10
+      bold: true
+      color: "$primary"
+      align: [center, middle]
+      text: ① 目标模型前向：verify + 记录 R_t
+  - elementId: phase2
+    elementType: text
+    bounds: [405, 62, 150, 16]
+    content:
+      fontSize: 10
+      bold: true
+      color: "$accent"
+      align: [center, middle]
+      text: ② 拒绝采样
+  - elementId: phase3
+    elementType: text
+    bounds: [590, 62, 335, 16]
+    content:
+      fontSize: 10
+      bold: true
+      color: "$violet"
+      align: [center, middle]
+      text: ③ commit：重建写回 → 草稿
+
+  # ---------- 泳道带 ----------
+  - elementId: lane1
+    elementType: shape
+    bounds: [25, 102, 910, 104]
+    shapeName: roundRect
+    adjustments: [8000]
+    fill: {type: solid, color: "$band"}
+    border: {style: dash, width: 1, color: "$bandBorder"}
+  - elementId: lane2
+    elementType: shape
+    bounds: [25, 232, 910, 104]
+    shapeName: roundRect
+    adjustments: [8000]
+    fill: {type: solid, color: "$band"}
+    border: {style: dash, width: 1, color: "$bandBorder"}
+  - elementId: lane3
+    elementType: shape
+    bounds: [25, 360, 910, 92]
+    shapeName: roundRect
+    adjustments: [8000]
+    fill: {type: solid, color: "$band"}
+    border: {style: dash, width: 1, color: "$bandBorder"}
+  - elementId: lane1-label
+    elementType: text
+    bounds: [35, 86, 400, 14]
+    content:
+      fontSize: 10
+      bold: true
+      color: "$muted"
+      align: [left, middle]
+      wrap: false
+      text: 目标模型前向 + RecoverSSM Adapter
+  - elementId: lane2-label
+    elementType: text
+    bounds: [35, 216, 300, 14]
+    content:
+      fontSize: 10
+      bold: true
+      color: "$muted"
+      align: [left, middle]
+      wrap: false
+      text: 状态与记录存储
+  - elementId: lane3-label
+    elementType: text
+    bounds: [35, 344, 300, 14]
+    content:
+      fontSize: 10
+      bold: true
+      color: "$muted"
+      align: [left, middle]
+      wrap: false
+      text: 草稿模型
+
+  # ---------- 连线 ----------
+  - elementId: e-read
+    elementType: line
+    bounds: [108, 190, 4, 58]
+    viewBox: [4, 58]
+    points: "2,58 2,0"
+    curve: sharp
+    arrow: [null, arrow]
+    border: {style: solid, width: 1.5, color: "$edge"}
+  - elementId: e-ckpt
+    elementType: line
+    bounds: [185, 152, 35, 4]
+    viewBox: [35, 4]
+    points: "0,2 35,2"
+    curve: sharp
+    arrow: [null, arrow]
+    border: {style: solid, width: 1.5, color: "$edge"}
+  - elementId: e-out
+    elementType: line
+    bounds: [370, 152, 35, 4]
+    viewBox: [35, 4]
+    points: "0,2 35,2"
+    curve: sharp
+    arrow: [null, arrow]
+    border: {style: solid, width: 1.5, color: "$edge"}
+  - elementId: e-sample
+    elementType: line
+    bounds: [555, 152, 35, 4]
+    viewBox: [35, 4]
+    points: "0,2 35,2"
+    curve: sharp
+    arrow: [null, arrow]
+    border: {style: solid, width: 1.5, color: "$edge"}
+  - elementId: e-store
+    elementType: line
+    bounds: [293, 190, 4, 58]
+    viewBox: [4, 58]
+    points: "2,0 2,58"
+    curve: sharp
+    arrow: [null, arrow]
+    border: {style: solid, width: 1.5, color: "$violet"}
+  - elementId: e-replay
+    elementType: line
+    bounds: [295, 168, 295, 182]
+    viewBox: [295, 182]
+    points: "0,182 0,170 277,170 277,0 295,0"
+    curve: sharp
+    arrow: [null, arrow]
+    border: {style: dash, width: 1.5, color: "$violet"}
+  - elementId: e-rebuild
+    elementType: line
+    bounds: [663, 190, 4, 58]
+    viewBox: [4, 58]
+    points: "2,0 2,58"
+    curve: sharp
+    arrow: [null, arrow]
+    border: {style: solid, width: 2, color: "$primary"}
+  - elementId: e-next
+    elementType: line
+    bounds: [740, 282, 35, 4]
+    viewBox: [35, 4]
+    points: "0,2 35,2"
+    curve: sharp
+    arrow: [null, arrow]
+    border: {style: dash, width: 1.5, color: "$edge"}
+  - elementId: e-before-draft
+    elementType: line
+    bounds: [665, 320, 110, 87]
+    viewBox: [110, 87]
+    points: "0,0 0,87 110,87"
+    curve: sharp
+    arrow: [null, arrow]
+    border: {style: solid, width: 1.5, color: "$edge"}
+  - elementId: e-draft-next
+    elementType: line
+    bounds: [848, 320, 4, 56]
+    viewBox: [4, 56]
+    points: "2,56 2,0"
+    curve: sharp
+    arrow: [null, arrow]
+    border: {style: solid, width: 1.5, color: "$green"}
+
+  # ---------- 连线标注 ----------
+  - elementId: e-out-label
+    elementType: text
+    bounds: [352, 192, 71, 10]
+    content:
+      fontSize: 8
+      color: "$muted"
+      align: [center, middle]
+      wrap: false
+      text: '\(y_t\)→logits'
+  - elementId: e-replay-label
+    elementType: text
+    bounds: [578, 222, 130, 10]
+    content:
+      fontSize: 8
+      color: "$violet"
+      align: [left, middle]
+      wrap: false
+      text: 按接受前缀 n 重放 R_t
+  - elementId: e-rebuild-label
+    elementType: text
+    bounds: [671, 214, 120, 10]
+    content:
+      fontSize: 8
+      color: "$primary"
+      align: [left, middle]
+      wrap: false
+      text: '\(S_{\mathrm{rebuilt}}=S_0P+U\)'
+  - elementId: e-before-draft-label
+    elementType: text
+    bounds: [671, 342, 90, 10]
+    content:
+      fontSize: 8
+      color: "$muted"
+      align: [left, middle]
+      wrap: false
+      text: 先于草稿前向
+
+  # ---------- 节点：泳道 1 ----------
+  - elementId: n-select
+    elementType: shape
+    bounds: [35, 118, 150, 72]
+    shapeName: roundRect
+    adjustments: [10000]
+    fill: {type: solid, color: "$primaryLight"}
+    border: {style: solid, width: 1.5, color: "$primary"}
+  - elementId: n-verify
+    elementType: shape
+    bounds: [220, 118, 150, 72]
+    shapeName: roundRect
+    adjustments: [10000]
+    fill: {type: solid, color: "$primaryLight"}
+    border: {style: solid, width: 1.5, color: "$primary"}
+  - elementId: n-sample
+    elementType: shape
+    bounds: [405, 118, 150, 72]
+    shapeName: roundRect
+    adjustments: [10000]
+    fill: {type: solid, color: "$accentLight"}
+    border: {style: solid, width: 1.5, color: "$accent"}
+  - elementId: n-commit
+    elementType: shape
+    bounds: [590, 118, 150, 72]
+    shapeName: roundRect
+    adjustments: [10000]
+    fill: {type: solid, color: "$primaryMid"}
+    border: {style: solid, width: 1.5, color: "$primary"}
+
+  # ---------- 节点：泳道 2 ----------
+  - elementId: n-prev
+    elementType: shape
+    bounds: [35, 248, 150, 72]
+    shapeName: roundRect
+    adjustments: [10000]
+    fill: {type: solid, color: "$violetLight"}
+    border: {style: solid, width: 1.5, color: "$violet"}
+  - elementId: n-records
+    elementType: shape
+    bounds: [220, 248, 150, 72]
+    shapeName: roundRect
+    adjustments: [10000]
+    fill: {type: solid, color: "$violetLight"}
+    border: {style: solid, width: 1.5, color: "$violet"}
+  - elementId: n-mirror
+    elementType: shape
+    bounds: [590, 248, 150, 72]
+    shapeName: roundRect
+    adjustments: [10000]
+    fill: {type: solid, color: "$violetLight"}
+    border: {style: solid, width: 1.5, color: "$violet"}
+  - elementId: n-next
+    elementType: shape
+    bounds: [775, 248, 150, 72]
+    shapeName: roundRect
+    adjustments: [10000]
+    fill: {type: solid, color: "$violetLight"}
+    border: {style: solid, width: 1.5, color: "$violet"}
+
+  # ---------- 节点：泳道 3 ----------
+  - elementId: n-draft
+    elementType: shape
+    bounds: [775, 376, 150, 62]
+    shapeName: roundRect
+    adjustments: [10000]
+    fill: {type: solid, color: "$greenLight"}
+    border: {style: solid, width: 1.5, color: "$green"}
+
+  # ---------- 节点文字 ----------
+  - elementId: t-select
+    elementType: text
+    bounds: [41, 124, 138, 60]
+    content:
+      align: [center, middle]
+      lineHeight: 1.25
+      text: |
+        <p style="text-align:center"><span style="font-size:10px; color:#1D4ED8"><strong>verify：选择 checkpoint</strong></span></p>
+        <p style="text-align:center; margin-top:3px"><span style="font-size:8px; color:$text">按 prev accepted−1 取 \(S_0\)</span></p>
+        <p style="text-align:center; margin-top:2px"><span style="font-size:8px; color:$muted">从原生 slot index_select</span></p>
+  - elementId: t-verify
+    elementType: text
+    bounds: [226, 124, 138, 60]
+    content:
+      align: [center, middle]
+      lineHeight: 1.25
+      text: |
+        <p style="text-align:center"><span style="font-size:10px; color:#1D4ED8"><strong>verify：逐 token 递推</strong></span></p>
+        <p style="text-align:center; margin-top:3px"><span style="font-size:8px; color:$text">\(S_t=S_{t-1}D_t+u_t\hat{k}^{\mathsf{T}}\)</span></p>
+        <p style="text-align:center; margin-top:2px"><span style="font-size:8px; color:$muted">\(y_t=S_t\hat{q}\)；S₀ 只读不改</span></p>
+  - elementId: t-sample
+    elementType: text
+    bounds: [411, 124, 138, 60]
+    content:
+      align: [center, middle]
+      lineHeight: 1.25
+      text: |
+        <p style="text-align:center"><span style="font-size:10px; color:#C2410C"><strong>RejectionSampler</strong></span></p>
+        <p style="text-align:center; margin-top:3px"><span style="font-size:8px; color:$text">拒绝采样，确定接受长度 n</span></p>
+        <p style="text-align:center; margin-top:2px"><span style="font-size:8px; color:$muted">n=(ids≥0).sum 含 bonus</span></p>
+  - elementId: t-commit
+    elementType: text
+    bounds: [596, 124, 138, 60]
+    content:
+      align: [center, middle]
+      lineHeight: 1.25
+      text: |
+        <p style="text-align:center"><span style="font-size:10px; color:#1D4ED8"><strong>commit：重建 \(S_{\mathrm{rebuilt}}\)</strong></span></p>
+        <p style="text-align:center; margin-top:3px"><span style="font-size:8px; color:$text">\(U\leftarrow U+u_t\hat{k}^{\mathsf{T}}P,\ P\leftarrow D_tP\)</span></p>
+        <p style="text-align:center; margin-top:2px"><span style="font-size:8px; color:$muted">t=n…1 反向，仅已接受前缀</span></p>
+  - elementId: t-prev
+    elementType: text
+    bounds: [41, 254, 138, 60]
+    content:
+      align: [center, middle]
+      lineHeight: 1.25
+      text: |
+        <p style="text-align:center"><span style="font-size:10px; color:#6D28D9"><strong>原生 state 槽位</strong></span></p>
+        <p style="text-align:center; margin-top:3px"><span style="font-size:8px; color:$text">已提交 checkpoint \(S_0\)</span></p>
+        <p style="text-align:center; margin-top:2px"><span style="font-size:8px; color:$muted">每槽位 H×V×K 矩阵</span></p>
+  - elementId: t-records
+    elementType: text
+    bounds: [226, 254, 138, 60]
+    content:
+      align: [center, middle]
+      lineHeight: 1.25
+      text: |
+        <p style="text-align:center"><span style="font-size:10px; color:#6D28D9"><strong>存储向量记录 R_t</strong></span></p>
+        <p style="text-align:center; margin-top:3px"><span style="font-size:8px; color:$text">\(R_t=(u_t,\ k_t,\ g^{\mathrm{raw}}_t)\)</span></p>
+        <p style="text-align:center; margin-top:2px"><span style="font-size:8px; color:$muted">pending：仅本同步步有效</span></p>
+  - elementId: t-mirror
+    elementType: text
+    bounds: [596, 254, 138, 60]
+    content:
+      align: [center, middle]
+      lineHeight: 1.25
+      text: |
+        <p style="text-align:center"><span style="font-size:10px; color:#6D28D9"><strong>更新 recurrent state</strong></span></p>
+        <p style="text-align:center; margin-top:3px"><span style="font-size:8px; color:$text">\(S_{\mathrm{rebuilt}}\) 写回原生 slot</span></p>
+        <p style="text-align:center; margin-top:2px"><span style="font-size:8px; color:$muted">镜像全部槽位，释放 R_t</span></p>
+  - elementId: t-next
+    elementType: text
+    bounds: [781, 254, 138, 60]
+    content:
+      align: [center, middle]
+      lineHeight: 1.25
+      text: |
+        <p style="text-align:center"><span style="font-size:10px; color:#6D28D9"><strong>下一轮 verify</strong></span></p>
+        <p style="text-align:center; margin-top:3px"><span style="font-size:8px; color:$text">以 \(S_{\mathrm{rebuilt}}\) 为新 \(S_0\)</span></p>
+        <p style="text-align:center; margin-top:2px"><span style="font-size:8px; color:$muted">沿用原生复制/索引契约</span></p>
+  - elementId: t-draft
+    elementType: text
+    bounds: [781, 380, 138, 54]
+    content:
+      align: [center, middle]
+      lineHeight: 1.25
+      text: |
+        <p style="text-align:center"><span style="font-size:10px; color:#047857"><strong>草稿模型前向</strong></span></p>
+        <p style="text-align:center; margin-top:3px"><span style="font-size:8px; color:$text">commit 完成后才起草</span></p>
+        <p style="text-align:center; margin-top:2px"><span style="font-size:8px; color:$muted">产出下一轮候选 token</span></p>
+
+  # ---------- 图例 ----------
+  - elementId: lg1-box
+    elementType: shape
+    bounds: [258, 472, 10, 10]
+    shapeName: rect
+    fill: {type: solid, color: "$primaryLight"}
+    border: {style: solid, width: 1, color: "$primary"}
+  - elementId: lg1-text
+    elementType: text
+    bounds: [272, 470, 140, 14]
+    content: {fontSize: 9, color: "$muted", align: [left, middle], wrap: false, text: 目标前向 + Adapter}
+  - elementId: lg2-box
+    elementType: shape
+    bounds: [424, 472, 10, 10]
+    shapeName: rect
+    fill: {type: solid, color: "$accentLight"}
+    border: {style: solid, width: 1, color: "$accent"}
+  - elementId: lg2-text
+    elementType: text
+    bounds: [438, 470, 70, 14]
+    content: {fontSize: 9, color: "$muted", align: [left, middle], wrap: false, text: 拒绝采样}
+  - elementId: lg3-box
+    elementType: shape
+    bounds: [520, 472, 10, 10]
+    shapeName: rect
+    fill: {type: solid, color: "$violetLight"}
+    border: {style: solid, width: 1, color: "$violet"}
+  - elementId: lg3-text
+    elementType: text
+    bounds: [534, 470, 110, 14]
+    content: {fontSize: 9, color: "$muted", align: [left, middle], wrap: false, text: 状态与记录存储}
+  - elementId: lg4-box
+    elementType: shape
+    bounds: [656, 472, 10, 10]
+    shapeName: rect
+    fill: {type: solid, color: "$greenLight"}
+    border: {style: solid, width: 1, color: "$green"}
+  - elementId: lg4-text
+    elementType: text
+    bounds: [670, 470, 70, 14]
+    content: {fontSize: 9, color: "$muted", align: [left, middle], wrap: false, text: 草稿模型}
