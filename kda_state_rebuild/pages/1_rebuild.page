@@ -1,0 +1,214 @@
+pageType: content
+background:
+  type: solid
+  color: "#FFFFFF"
+elements:
+  # ---------- header ----------
+  - elementId: kicker
+    elementType: text
+    bounds: [48, 28, 700, 16]
+    content:
+      fontSize: 10
+      color: "$faint"
+      letterSpacing: 2
+      wrap: false
+      text: KIMI K3 · SPECULATIVE DECODING · RECOVERSSM
+  - elementId: title
+    elementType: text
+    bounds: [48, 48, 864, 32]
+    content:
+      fontSize: 22
+      bold: true
+      color: "$ink"
+      fontFamily: 思源宋体
+      wrap: false
+      align: [left, middle]
+      text: KDA State 重建原理：一份 checkpoint + 每步三个向量，恢复任意接受前缀
+  - elementId: head-rule
+    elementType: shape
+    bounds: [48, 94, 864, 1]
+    shapeName: rect
+    fill: {type: solid, color: "$rule"}
+
+  # ---------- left column: 01 principle ----------
+  - elementId: sec01-head
+    elementType: text
+    bounds: [48, 116, 520, 20]
+    content:
+      wrap: false
+      text: |
+        <p><span style="font-size:11px;color:$accent">01</span><span style="font-size:11px;color:$accent">　</span><span style="font-size:14px;color:$ink"><strong>原理 —— 单步递推是仿射变换</strong></span></p>
+  - elementId: sec01-formula
+    elementType: text
+    bounds: [48, 142, 520, 30]
+    content:
+      fontSize: 16
+      color: "$ink"
+      align: [left, middle]
+      wrap: false
+      text: |
+        <p>\(S_t = S_{t-1}\,D_t + u_t\,\hat{k}_t^{\mathsf{T}}\)</p>
+  - elementId: sec01-note
+    elementType: text
+    bounds: [48, 174, 520, 62]
+    content:
+      fontSize: 10
+      color: "$gray"
+      lineHeight: 1.5
+      text: |
+        <p>其中 \(D_t=\mathrm{diag}(\exp(\gamma_t))\)沿 key 维逐列衰减；\(u_t=\sigma(\beta^{\mathrm{raw}}_t)\odot\bigl(v_t-\widetilde{S}_t\hat{k}_t\bigr)\)为 rank-1 修正向量</p>
+        <p style="margin-top:6px"><span style="color:$teal">gate → 衰减（逐元素、确定性）：</span>\(\gamma_t=-a\,\mathrm{softplus}(g^{\mathrm{raw}}_t+b)\)，或带下界 \(\ell\,\sigma\!\left(a(g^{\mathrm{raw}}_t+b)\right)\)，\(a=\exp(A_{\log})\)</p>
+  - elementId: sec01-arrow
+    elementType: text
+    bounds: [48, 242, 520, 16]
+    content:
+      fontSize: 11
+      color: "$gray"
+      wrap: false
+      text: |
+        <p><span style="color:$accent">⇓</span>　\(D_t\)均为对角矩阵、彼此可交换 → 递推可展开为闭式</p>
+  - elementId: sec01-panel
+    elementType: shape
+    bounds: [48, 264, 520, 50]
+    shapeName: rect
+    fill: {type: solid, color: "$tint"}
+  - elementId: sec01-closed
+    elementType: text
+    bounds: [64, 264, 488, 50]
+    content:
+      fontSize: 15
+      color: "$ink"
+      align: [center, middle]
+      wrap: false
+      text: |
+        <p>\(S_n = S_0\prod_{t=1}^{n}D_t + \sum_{i=1}^{n} u_i\,\hat{k}_i^{\mathsf{T}}\prod_{j=i+1}^{n}D_j\)</p>
+
+  # ---------- left column: 03 why ----------
+  - elementId: rule-1
+    elementType: shape
+    bounds: [48, 326, 520, 1]
+    shapeName: rect
+    fill: {type: solid, color: "$rule"}
+  - elementId: sec03-head
+    elementType: text
+    bounds: [48, 338, 520, 20]
+    content:
+      wrap: false
+      text: |
+        <p><span style="font-size:11px;color:$accent">03</span><span style="font-size:11px;color:$accent">　</span><span style="font-size:14px;color:$ink"><strong>为什么存这些就够</strong></span></p>
+  - elementId: sec03-body
+    elementType: text
+    bounds: [48, 360, 520, 52]
+    content:
+      fontSize: 11
+      color: "$gray"
+      lineHeight: 1.6
+      text: |
+        <p>递推对状态是仿射的，每步的全部影响浓缩在 \((u_t,\hat{k}_t,D_t)\)中；给早期 correction 补上后续衰减权重再累加，即得任意前缀 \(S_n\)。被拒绝的 suffix 不读取、天然排除；commit 用同一份 raw gate 重算 \(D_t\)，与 verify 数值路径一致。</p>
+
+  # ---------- left column: 04 how ----------
+  - elementId: rule-2
+    elementType: shape
+    bounds: [48, 422, 520, 1]
+    shapeName: rect
+    fill: {type: solid, color: "$rule"}
+  - elementId: sec04-head
+    elementType: text
+    bounds: [48, 434, 520, 20]
+    content:
+      wrap: false
+      text: |
+        <p><span style="font-size:11px;color:$accent">04</span><span style="font-size:11px;color:$accent">　</span><span style="font-size:14px;color:$ink"><strong>怎么重建 —— commit 反向累积一趟</strong></span></p>
+  - elementId: sec04-algo
+    elementType: text
+    bounds: [48, 454, 520, 54]
+    content:
+      fontSize: 12
+      color: "$ink"
+      lineHeight: 1.5
+      text: |
+        <p>\(P \gets I_K,\quad U \gets \mathbf{0}_{V\times K}\)</p>
+        <p>for \(t = n, n-1, \dots, 1\)：　\(U \gets U + u_t\,\hat{k}_t^{\mathsf{T}} P,\quad P \gets D_t\,P\)</p>
+        <p>\(S_{\mathrm{rebuilt}} \gets S_0\,P + U\)　→ 写回该 request 的 checkpoint slot</p>
+
+  # ---------- right column divider ----------
+  - elementId: col-divider
+    elementType: shape
+    bounds: [582, 116, 1, 396]
+    shapeName: rect
+    fill: {type: solid, color: "$rule"}
+
+  # ---------- right column: 02 what to store ----------
+  - elementId: sec02-head
+    elementType: text
+    bounds: [604, 116, 308, 20]
+    content:
+      wrap: false
+      text: |
+        <p><span style="font-size:11px;color:$accent">02</span><span style="font-size:11px;color:$accent">　</span><span style="font-size:14px;color:$ink"><strong>存什么 —— verify 阶段只记录</strong></span></p>
+  - elementId: sec02-list
+    elementType: text
+    bounds: [604, 142, 308, 122]
+    content:
+      fontSize: 11
+      color: "$ink"
+      lineHeight: 1.5
+      text: |
+        <p>\(u_t \in \mathbb{R}^{V}\)　<span style="color:$gray">rank-1 修正向量</span></p>
+        <p style="margin-top:12px">\(k_t \in \mathbb{R}^{K}\)　<span style="color:$gray">原始 key，commit 重新归一化</span></p>
+        <p style="margin-top:12px">\(g^{\mathrm{raw}}_t \in \mathbb{R}^{K}\)　<span style="color:$gray">原始 gate，重算 \(D_t\)</span></p>
+        <p style="margin-top:12px">\(S_0 \in \mathbb{R}^{V\times K}\)　<span style="color:$gray">已提交 checkpoint，全局一份</span></p>
+  - elementId: sec02-accent
+    elementType: text
+    bounds: [604, 270, 308, 18]
+    content:
+      fontSize: 11
+      bold: true
+      color: "$accent"
+      wrap: false
+      text: |
+        <p>每位置仅 \(O(V+2K)\)，而非完整矩阵 \(V\times K\)</p>
+  - elementId: rule-3
+    elementType: shape
+    bounds: [604, 298, 308, 1]
+    shapeName: rect
+    fill: {type: solid, color: "$rule"}
+  - elementId: sec02-cost-head
+    elementType: text
+    bounds: [604, 312, 308, 18]
+    content:
+      fontSize: 12
+      bold: true
+      color: "$ink"
+      wrap: false
+      text: 存储量对比（H 个 head、链长 L）
+  - elementId: sec02-cost
+    elementType: text
+    bounds: [604, 334, 308, 48]
+    content:
+      fontSize: 12
+      color: "$ink"
+      lineHeight: 1.7
+      text: |
+        <p><span style="color:$teal"><strong>RecoverSSM</strong></span>　\(O\bigl(HVK + LH(V+2K)\bigr)\)</p>
+        <p><span style="color:$faint">原始方案</span>　　\(O(LHVK)\)</p>
+  - elementId: sec02-note
+    elementType: text
+    bounds: [604, 394, 308, 54]
+    content:
+      fontSize: 10
+      color: "$faint"
+      lineHeight: 1.55
+      text: |
+        <p>verify 期间 checkpoint 保持不变；commit 只重建接受前缀并写回原 slot，随后释放本轮记录。下一轮从已写回状态继续，递推链保持连续。</p>
+
+  # ---------- footer ----------
+  - elementId: footer
+    elementType: text
+    bounds: [48, 524, 864, 13]
+    content:
+      fontSize: 9
+      color: "$faint"
+      wrap: false
+      text: |
+        <p>依据 <a href="https://github.com/vllm-project/vllm-ascend/pull/19087">vllm-ascend PR #19087</a>（kda_recoverssm_verify / kda_recoverssm_commit）实现整理　·　存储量为逻辑 tensor size，非 allocator 实际缩减</p>

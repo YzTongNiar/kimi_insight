@@ -1,0 +1,18 @@
+version: v2
+title: KDA State 重建原理
+size: [960, 540]
+customFonts:
+  - family: 思源宋体
+    src: "https://statics.kimi.ai/neo-design-static/p-font/思源宋体.ttf"
+theme:
+  colors:
+    ink: "#191919"
+    gray: "#5B5B5B"
+    faint: "#8A8A8A"
+    rule: "#E3E1DC"
+    accent: "#C2410C"
+    teal: "#0F766E"
+    tint: "#FAF6F0"
+pages:
+  - pages/1_rebuild.page
+  - pages/2_timeline.page
