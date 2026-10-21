@@ -1,0 +1,276 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Kimi K3 KDA RecoverSSM 投机推理：verify → 拒绝采样 → commit 全流程",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "verify-view",
+        "label": "verify 与记录",
+        "focus": [
+          "prev_state",
+          "select",
+          "verify_kernel",
+          "records"
+        ],
+        "note": "验证前向只读 checkpoint，把 key / raw gate / correction 向量写入 pending 记录。"
+      },
+      {
+        "id": "commit-view",
+        "label": "采样与 commit",
+        "focus": [
+          "reject_sample",
+          "commit_kernel",
+          "mirror",
+          "records"
+        ],
+        "note": "拒绝采样后立即 commit：重建已接受前缀的 current state 并镜像回原生槽位。"
+      },
+      {
+        "id": "draft-view",
+        "label": "草稿与下一轮",
+        "focus": [
+          "mirror",
+          "mtp_draft",
+          "next_step",
+          "prev_state"
+        ],
+        "note": "commit 先于 草稿模型前向；下一轮 verify 按新 accepted 数重新选择 checkpoint。"
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "target",
+      "label": "目标模型前向 + RecoverSSM Adapter"
+    },
+    {
+      "id": "store",
+      "label": "状态与记录存储"
+    },
+    {
+      "id": "draft",
+      "label": "草稿模型"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p_verify",
+      "label": "① 目标模型前向：verify + 记录 R_t",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p_sample",
+      "label": "② 拒绝采样",
+      "fromCol": 2,
+      "toCol": 2
+    },
+    {
+      "id": "p_commit",
+      "label": "③ commit：重建写回 → 草稿",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "prev_state",
+    "select",
+    "verify_kernel",
+    "reject_sample",
+    "commit_kernel",
+    "mirror",
+    "mtp_draft",
+    "next_step"
+  ],
+  "nodes": [
+    {
+      "id": "prev_state",
+      "lane": "store",
+      "col": 0,
+      "type": "database",
+      "label": "原生 recurrent state 槽位",
+      "sublabel": "已提交的 checkpoint S₀",
+      "width": 176
+    },
+    {
+      "id": "select",
+      "lane": "target",
+      "col": 0,
+      "type": "backend",
+      "label": "verify：选择 checkpoint",
+      "sublabel": "按 prev accepted−1 取 S₀",
+      "width": 190
+    },
+    {
+      "id": "verify_kernel",
+      "lane": "target",
+      "col": 1,
+      "type": "backend",
+      "label": "verify：逐 token 递推",
+      "sublabel": "S_t=S_{t−1}D_t+u_tk̂ᵀ；y_t=S_tq̂",
+      "tag": "验证前向",
+      "width": 176
+    },
+    {
+      "id": "records",
+      "lane": "store",
+      "col": 1,
+      "type": "database",
+      "label": "存储向量记录 R_t（pending）",
+      "sublabel": "R_t=(u_t, k_t, g_raw_t)，O(V+2K)",
+      "tag": "仅存于 verify→采样之间",
+      "width": 184
+    },
+    {
+      "id": "reject_sample",
+      "lane": "target",
+      "col": 2,
+      "type": "security",
+      "label": "RejectionSampler 拒绝采样",
+      "sublabel": "n=(ids≥0).sum 含 bonus，−1 排除",
+      "tag": "决定 accepted 数",
+      "width": 176
+    },
+    {
+      "id": "commit_kernel",
+      "lane": "target",
+      "col": 3,
+      "type": "backend",
+      "label": "commit：重建 S_rebuilt",
+      "sublabel": "U+=u_tk̂ᵀP；P←D_tP（t=n…1）",
+      "tag": "状态重建",
+      "width": 190
+    },
+    {
+      "id": "mirror",
+      "lane": "store",
+      "col": 3,
+      "type": "database",
+      "label": "更新 recurrent state",
+      "sublabel": "S_rebuilt=S₀P+U 写回 slot，释放 R_t",
+      "tag": "写入",
+      "width": 200
+    },
+    {
+      "id": "mtp_draft",
+      "lane": "draft",
+      "col": 4,
+      "type": "backend",
+      "label": "草稿模型前向",
+      "sublabel": "commit 完成后才起草",
+      "width": 176
+    },
+    {
+      "id": "next_step",
+      "lane": "store",
+      "col": 4,
+      "type": "database",
+      "label": "下一轮 verify",
+      "sublabel": "以 S_rebuilt 为新 S₀",
+      "width": 176
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-read",
+      "from": "prev_state",
+      "to": "select",
+      "variant": "default"
+    },
+    {
+      "id": "e-ckpt",
+      "from": "select",
+      "to": "verify_kernel",
+      "label": "checkpoint S₀（块 0=padding）",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-store",
+      "from": "verify_kernel",
+      "to": "records",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-out",
+      "from": "verify_kernel",
+      "to": "reject_sample",
+      "label": "y_t→logits",
+      "variant": "default"
+    },
+    {
+      "id": "e-replay",
+      "from": "records",
+      "to": "commit_kernel",
+      "label": "按接受前缀 n 重放 R_t",
+      "variant": "dashed",
+      "role": "branch",
+      "toSide": "left"
+    },
+    {
+      "id": "e-sample",
+      "from": "reject_sample",
+      "to": "commit_kernel",
+      "variant": "security",
+      "toSide": "left"
+    },
+    {
+      "id": "e-rebuild",
+      "from": "commit_kernel",
+      "to": "mirror",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-before-draft",
+      "from": "mirror",
+      "to": "mtp_draft",
+      "label": "先于草稿前向完成",
+      "variant": "default"
+    },
+    {
+      "id": "e-next",
+      "from": "mirror",
+      "to": "next_step",
+      "variant": "dashed"
+    },
+    {
+      "id": "e-draft-next",
+      "from": "mtp_draft",
+      "to": "next_step",
+      "label": "草稿 token",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "存储 / 重建 / 写入（对照公式）",
+      "items": [
+        "存储：verify 逐位置保存 R_t=(u_t, k_t, g_raw_t)，开销 O(V+2K)，不改写 S₀",
+        "重建：commit 反向累积 U+=u_tk̂ᵀP、P←D_tP，得 S_rebuilt=S₀P+U（等价闭式 S₀D_1…D_n+Σu_ik̂_iᵀD_{i+1}…D_n）",
+        "写入：S_rebuilt 写回原生 slot 并镜像到全部槽位，随后释放本轮 R_t"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "顺序契约",
+      "items": [
+        "verify 只读 S₀，原生 state 在验证前向期间保持不变",
+        "拒绝采样确定 n 后立即 commit，且 commit 先于草稿模型前向",
+        "commit 前的二次 verify 直接报错，不会静默覆盖 pending 记录"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "存储量级",
+      "items": [
+        "原生方案：每位置存整份矩阵，O(L·H·V·K)",
+        "RecoverSSM：HVK（checkpoint）+ LH(V+2K)（R_t 记录）"
+      ]
+    }
+  ]
+}
